@@ -13,7 +13,9 @@ const HTML = `<div class="appWrap wide">
 </div>`;
 const CSS = `.thBox{display:grid;place-items:center;padding:10px;background:#05010b;box-shadow:0 0 0 3px var(--line2);flex:2;min-width:360px}
 .thBox canvas{width:100%;aspect-ratio:384/216;cursor:none}
-.gSel{width:auto;font-size:14px;padding:6px 10px;margin-right:8px}
+.gSel{appearance:none;-webkit-appearance:none;width:auto;font:inherit;font-size:13px;padding:7px 28px 7px 10px;margin-right:8px;color:#d9c6ff;background:#100830 url("data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%2710%27 height=%276%27%3E%3Cpath d=%27M0 0h10L5 6z%27 fill=%27%23ff5ad9%27/%3E%3C/svg%3E") no-repeat right 9px center;border:2px solid #2a1d52;border-radius:0;cursor:pointer}
+.gSel:focus{outline:none;border-color:#ff5ad9}
+.gSel option{background:#100830;color:#d9c6ff}
 .rhMain{display:flex;gap:24px;align-items:flex-start;flex-wrap:wrap}
 .rhSide{display:flex;flex-direction:column;gap:16px;flex:1;min-width:280px}
 #rhSongs{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:14px;max-height:560px;overflow-y:auto;padding:4px 8px 4px 4px}
