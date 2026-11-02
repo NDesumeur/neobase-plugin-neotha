@@ -8,7 +8,8 @@ const HTML = `<div class="appWrap wide">
       <div id="rhSongs"></div>
       <div class="sysCard px rhOpts"><label>Volume <input type="range" id="rhVol" min="0" max="100" value="70"></label>
         
-        <label>Décalage audio <select class="f gSel" id="rhOffset"><option value="-120">-120 ms</option><option value="-80">-80 ms</option><option value="-40">-40 ms</option><option value="0" selected>0 ms</option><option value="40">+40 ms</option><option value="80">+80 ms</option><option value="120">+120 ms</option></select></label></div></div></div>
+        <label>Décalage audio <select class="f gSel" id="rhOffset"><option value="-120">-120 ms</option><option value="-80">-80 ms</option><option value="-40">-40 ms</option><option value="0" selected>0 ms</option><option value="40">+40 ms</option><option value="80">+80 ms</option><option value="120">+120 ms</option></select></label>
+        <label>Curseur <select class="f gSel" id="thCur"><option value="dot" selected>Point</option><option value="ring">Cercle</option><option value="square">Carré</option></select></label></div></div></div>
   <div class="hint">Comme Rhythia : les notes arrivent du fond du tunnel, partout dans le champ, parfois en longues séries. Passe le curseur dessus à l'instant où elles arrivent ; plus tu es au centre, meilleure est la note. La souris est capturée pendant la partie.</div>
 </div>`;
 const CSS = `.thBox{position:relative}
@@ -314,8 +315,8 @@ function rhChartImport(a, diff) {  // diff : facile…expert, ou « S5 » = nive
   picked.forEach((c, i) => {
     let lane = c.band;  // low sounds on the left, high ones on the right
     if (lane === last && c.t - lastT < .3) lane = (lane + (i % 2 ? 1 : 3)) % 4;
-    const next = picked[i + 1]?.t ?? a.len, room = next - c.t, f2 = Math.round(c.f + a.fps * a.beat), held = a.rms[f2] >= a.rms[c.f] * .6;
-    const len = D !== 'expert' && room >= a.beat * (D === 'facile' ? 2 : 1.5) && held ? Math.min(room - a.beat * .3, a.beat * 3) * .9 : 0;
+    const next = picked[i + 1]?.t ?? a.len, room = next - c.t, f2 = Math.round(c.f + a.fps * a.beat), held = a.rms[f2] >= a.rms[c.f] * .4;
+    const need = D === 'facile' ? 1.4 : 1.1, len = (D !== 'expert' || room >= a.beat * 2) && room >= a.beat * need && (held || room >= a.beat * 1.8) ? Math.min(room - a.beat * .3, a.beat * 3) * .9 : 0;
     notes.push({t: c.t, lane, len});
     if (D === 'expert' && c.s >= strong) notes.push({t: c.t, lane: (lane + 2) % 4, len: 0});
     last = lane; lastT = c.t;
@@ -481,16 +482,7 @@ function thSfx(kind) {  // le « pop » d'une note touchée (plus aigu quand c'e
   const n = c.createBufferSource(), fl = c.createBiquadFilter(), g2 = c.createGain(); n.buffer = rhNoise; fl.type = 'highpass'; fl.frequency.value = 5000; g2.gain.setValueAtTime(.3, t); g2.gain.exponentialRampToValueAtTime(.0001, t + .03);
   n.connect(fl).connect(g2).connect(rhOut); n.start(t, Math.random() * .5); n.stop(t + .04);
 }
-let thBg = null; const thCurs = {};
-function thCursor(red) {  // le dessin du curseur est fait une seule fois
-  const key = red ? 'r' : 'w'; if (thCurs[key]) return thCurs[key];
-  const c = document.createElement('canvas'); c.width = c.height = 96; const b = c.getContext('2d'), col = red ? '#ff4f6d' : '#ffffff', glow = red ? '255,79,109' : '255,90,217';
-  const gr = b.createRadialGradient(48, 48, 4, 48, 48, 46); gr.addColorStop(0, `rgba(${glow},.55)`); gr.addColorStop(.5, `rgba(${glow},.16)`); gr.addColorStop(1, `rgba(${glow},0)`); b.fillStyle = gr; b.fillRect(0, 0, 96, 96);
-  b.strokeStyle = col; b.lineWidth = 4; b.lineCap = 'round'; b.beginPath(); b.arc(48, 48, 20, 0, 6.283); b.stroke();
-  for (let k = 0; k < 4; k++) { const a = k * Math.PI / 2; b.beginPath(); b.moveTo(48 + Math.cos(a) * 27, 48 + Math.sin(a) * 27); b.lineTo(48 + Math.cos(a) * 37, 48 + Math.sin(a) * 37); b.stroke(); }
-  b.fillStyle = col; b.beginPath(); b.arc(48, 48, 5, 0, 6.283); b.fill();
-  return thCurs[key] = c;
-}
+let thBg = null;
 const thPos = n => [TH.CX + n.u * TH.K, TH.CY + n.v * TH.K];
 function rhJudge(n) {  // la note est touchée : réussie, sans nuance
   n.judged = true; rh.combo++; rh.maxCombo = Math.max(rh.maxCombo, rh.combo); rh.counts.PARFAIT++;
@@ -562,7 +554,10 @@ function rhDraw() {
   const T = rh.trail; g.lineCap = 'round';
   for (let k = 1; k < T.length; k++) { const q = k / T.length; g.strokeStyle = `rgba(255,160,235,${q * .55})`; g.lineWidth = .6 + q * 3.2; g.beginPath(); g.moveTo(T[k - 1][0], T[k - 1][1]); g.lineTo(T[k][0], T[k][1]); g.stroke(); }
   g.lineCap = 'butt';
-  const S = 22 * (1 + rh.cp * .4); g.save(); g.translate(rh.mx, rh.my); g.rotate(t * 1.2); g.drawImage(thCursor(rh.cm > .05), -S / 2, -S / 2, S, S); g.restore();
+  const cc = rh.cm > .05 ? '#ff4f6d' : '#ffffff', mx = rh.mx, my = rh.my, pu = rh.cp * 2;  // trois styles au choix (Options)
+  if (thCurStyle === 'square') { px(g, 'rgba(255,90,217,.9)', mx - 4, my - 4, 8, 8); g.fillStyle = cc; g.fillRect(mx - 3, my - 3, 6, 6); }
+  else if (thCurStyle === 'ring') { g.strokeStyle = cc; g.lineWidth = 1.5; g.beginPath(); g.arc(mx, my, 5 + pu, 0, 6.283); g.stroke(); g.fillStyle = cc; g.beginPath(); g.arc(mx, my, 1.4, 0, 6.283); g.fill(); }
+  else { g.fillStyle = cc; g.beginPath(); g.arc(mx, my, 3.2 + pu * .6, 0, 6.283); g.fill(); g.strokeStyle = 'rgba(255,90,217,.9)'; g.lineWidth = 1.2; g.stroke(); }
   // interface
   g.fillStyle = 'rgba(11,3,28,.7)'; g.fillRect(0, 0, W, 16);
   pxFont(g, String(rh.score).padStart(7, '0'), 4, 11, '#ffffff', 7);
@@ -630,7 +625,7 @@ $('rhFile').onchange = async e => {
 };
 $('rhMuBtn').onclick = () => { const t = $('rhMuList')._songs?.find(x => muId(x) === $('rhMuList').value); if (t) rhAddImport({id: muId(t), name: t.display_title || t.file, file: t.file || '', url: t.url || '', stars: +$('rhStars').value}); };
 setInterval(() => { if (rhCtx?.state === 'running' && (!view.classList.contains('on') || rh?.mode !== 'play')) rhCtx.suspend(); }, 200);  // the music stops with the game
-let thRect = null; for (const ev of ['resize', 'scroll', 'fullscreenchange']) addEventListener(ev, () => { thRect = null; }, true);
+let thCurStyle = 'dot', thRect = null; for (const ev of ['resize', 'scroll', 'fullscreenchange']) addEventListener(ev, () => { thRect = null; }, true);
 const thCv = () => $('rhCanvas');
 const thLock = () => { try { thCv().requestPointerLock?.()?.catch?.(() => {}); } catch {} };  // comme dans Rhythia : la souris est capturée pendant la partie (Échap pour la libérer)
 const thAim = e => {
@@ -650,11 +645,12 @@ document.addEventListener('keydown', e => {
 
 $('rhFs').onclick = () => { if (document.fullscreenElement) document.exitFullscreen(); else $('rhCanvas').parentElement.requestFullscreen?.().catch(() => {}); };  // plein écran jusqu'à la fin de la partie
 $('rhOffset').addEventListener('change', () => { rhOffMs = +$('rhOffset').value; });
+$('thCur').addEventListener('change', () => { thCurStyle = $('thCur').value; });
 $('rhVol').oninput = () => { if (rhOut) rhOut.gain.value = +$('rhVol').value / 100 * .6; };
-for (const id of ['rhVol', 'rhOffset']) $(id).addEventListener('change', () => { gstore('neothaPrefs', {})[id] = $(id).value; saveGames(); });
+for (const id of ['rhVol', 'rhOffset', 'thCur']) $(id).addEventListener('change', () => { gstore('neothaPrefs', {})[id] = $(id).value; saveGames(); });
 function rhOpen() {
-  const p = games.neothaPrefs || {}; for (const id of ['rhVol', 'rhOffset']) if (p[id] != null) $(id).value = p[id];
-  rhOffMs = +$('rhOffset').value;
+  const p = games.neothaPrefs || {}; for (const id of ['rhVol', 'rhOffset', 'thCur']) if (p[id] != null) $(id).value = p[id];
+  rhOffMs = +$('rhOffset').value; thCurStyle = $('thCur').value;
   if (rh) { rhList(); return gameLoop(rh, 'neodyme:neotha', rhUpdate, rhDraw); }
   const last = games.neothaLast || {song: 0, diff: 'normal'}; rhSelect(last.song, last.diff).catch(() => rhSelect(0, 'normal'));  // an imported music may be missing on this PC
 }  // (non indenté : les textes sur plusieurs lignes restent exactement les tiens)
