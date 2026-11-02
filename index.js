@@ -1,6 +1,6 @@
 const HTML = `<div class="appWrap wide">
-  <div class="agHead"><span class="label">NeoTha</span><span class="hint">Souris : survole chaque note quand elle atteint la grille · espace : jouer · P : pause</span></div>
-  <div class="rhMain"><div class="thBox"><canvas id="rhCanvas" width="384" height="216"></canvas></div>
+  <div class="agHead"><span class="label">NeoTha</span><span class="hint">Souris : touche chaque note quand elle arrive · espace : jouer · P : pause · Échap : libère la souris</span></div>
+  <div class="rhMain"><div class="thBox"><canvas id="rhCanvas" width="1152" height="648"></canvas></div>
     <div class="rhSide"><div class="rhTabs"><button class="tab px on" id="rhTabSongs">CHANSONS</button><button class="tab px" id="rhTabMine">MES MUSIQUES</button></div>
       <div class="sysCard px rhImport" id="rhImport" style="display:none"><div class="row"><button class="btn main px" id="rhFileBtn">IMPORTER UN FICHIER AUDIO</button><input type="file" id="rhFile" accept="audio/*,.mp3,.m4a,.ogg,.opus,.wav,.flac,.webm" hidden></div>
         <div class="row"><select class="f gSel" id="rhMuList"></select><button class="btn px" id="rhMuBtn">CRÉER LE NIVEAU</button></div>
@@ -9,10 +9,10 @@ const HTML = `<div class="appWrap wide">
       <div class="sysCard px rhOpts"><label>Volume <input type="range" id="rhVol" min="0" max="100" value="70"></label>
         <label>Vitesse des notes <select class="f gSel" id="rhSpeed"><option value="1.5">Lente</option><option value="2" selected>Normale</option><option value="2.6">Rapide</option><option value="3.2">Très rapide</option></select></label>
         <label>Décalage audio <select class="f gSel" id="rhOffset"><option value="-120">-120 ms</option><option value="-80">-80 ms</option><option value="-40">-40 ms</option><option value="0" selected>0 ms</option><option value="40">+40 ms</option><option value="80">+80 ms</option><option value="120">+120 ms</option></select></label></div></div></div>
-  <div class="hint">Comme Rhythia : les notes viennent vers toi dans un tunnel, déplace le curseur sur chacune au moment où elle atteint la grille. Plus tu es au centre, plus c'est précis.</div>
+  <div class="hint">Comme Rhythia : les notes arrivent du fond du tunnel, partout dans le champ, parfois en longues séries. Passe le curseur dessus à l'instant où elles arrivent ; plus tu es au centre, meilleure est la note. La souris est capturée pendant la partie.</div>
 </div>`;
 const CSS = `.thBox{display:grid;place-items:center;padding:10px;background:#05010b;box-shadow:0 0 0 3px var(--line2);flex:2;min-width:360px}
-.thBox canvas{width:100%;aspect-ratio:384/216;image-rendering:pixelated;cursor:none}
+.thBox canvas{width:100%;aspect-ratio:384/216;cursor:none}
 .gSel{width:auto;font-size:14px;padding:6px 10px;margin-right:8px}
 .rhMain{display:flex;gap:24px;align-items:flex-start;flex-wrap:wrap}
 .rhSide{display:flex;flex-direction:column;gap:16px;flex:1;min-width:280px}
@@ -365,10 +365,10 @@ async function rhSelect(i, diff) {
     const {a, buffer} = await rhLoadImport(imp);
     c = {events: [], lead: [], len: a.len, step: a.beat / 4, buffer}; notes = rhChartImport(a, diff); info = {name: imp.name, bpm: a.bpm, key: 'rhx' + imp.id + diff};
   }
-  notes = thCells(notes, info.name.length * 977 + Math.round(info.bpm * 10));
+  notes = thLayout(thStreams(notes, c, diff), info.name.length * 977 + Math.round(info.bpm * 10));
   try { rh?.src?.stop(); } catch {}
   rh = rh || {raf: 0};
-  Object.assign(rh, {g: $('rhCanvas').getContext('2d'), mode: 'ready', tick: 0, song: i, diff, c, info, notes, src: null, ev: 0, t0: 0, score: 0, combo: 0, maxCombo: 0, counts: {PARFAIT: 0, BIEN: 0, OK: 0, RATÉ: 0}, judge: null, mx: 192, my: 116, trail: [], sparks: [], done: false});
+  Object.assign(rh, {g: $('rhCanvas').getContext('2d'), mode: 'ready', tick: 0, song: i, diff, c, info, notes, src: null, ev: 0, t0: 0, score: 0, combo: 0, maxCombo: 0, counts: {PARFAIT: 0, BIEN: 0, OK: 0, RATÉ: 0}, judge: null, mx: 192, my: 112, vx: 192, vy: 112, trail: [], fx: [], sparks: [], done: false});
   games.neothaLast = {song: i, diff}; rhList();
   gameLoop(rh, 'neodyme:neotha', rhUpdate, rhDraw);
 }
@@ -384,36 +384,68 @@ function rhPress() {
   if (rh.mode === 'pause') { rh.mode = 'play'; rhCtx.resume(); return; }
   if (rh.mode === 'over') rhSelect(rh.song, rh.diff);
 }
-/* ---------- NeoTha : gameplay à la Rhythia — les notes arrivent dans un tunnel sur une grille 3×3, il faut avoir le curseur dessus quand elles arrivent ---------- */
-const TH = {W: 384, H: 216, CX: 192, CY: 116, CELL: 46, HALF: 17, PAD: [.03, .12], GRADES: [[.35, 'PARFAIT', 300, '#ffd07a'], [.7, 'BIEN', 200, '#8ee8a0'], [9, 'OK', 100, '#7fe0ee']]};
-const thPos = c => [TH.CX + (c % 3 - 1) * TH.CELL, TH.CY + (Math.floor(c / 3) - 1) * TH.CELL];
-function thCells(notes, seed) {  // où chaque note tombe : un saut de 1 à 5 cases selon la voie, jamais deux notes simultanées au même endroit
-  const r = seeded(seed | 0); let cell = 4;
-  return notes.map(n => { cell = (cell + [1, 2, 4, 5][n.lane] + (r() < .25 ? 1 : 0)) % 9; return {...n, len: 0, cell}; });
+/* ---------- NeoTha : gameplay à la Rhythia — des notes creuses arrivent du fond d'un tunnel, positions libres dans un champ 3×3, séries (streams) et sauts ; on les touche avec le curseur ---------- */
+const TH = {W: 384, H: 216, CX: 192, CY: 112, K: 46, HALF: 16, LIM: 1.2, DEPTH: 6, PAD: [.035, .12], GRADES: [[.4, 'PARFAIT', 300, '#ffd07a'], [.75, 'BIEN', 200, '#8ee8a0'], [9, 'OK', 100, '#7fe0ee']], COL: ['#7fe0ee', '#ff5ad9']};
+const thClamp = (v, a, b) => Math.max(a, Math.min(b, v));
+function thStreams(notes, c, diff) {  // une note tenue devient une série de notes rapides (à la double-croche en difficile/expert)
+  const iv = c.step * {facile: 0, normal: 2, difficile: 1, expert: 1}[diff], out = [];
+  for (const n of notes) { out.push(n); if (iv && n.len > iv * 2.5) for (let t = n.t + iv; t < n.t + n.len - iv * .3; t += iv) out.push({...n, t, len: 0, judged: false, held: false, stream: true}); }
+  return out.sort((a, b) => a.t - b.t);
 }
-function rhJudge(n, d) {  // d : distance du curseur au centre de la note, en cases
+function thLayout(notes, seed) {  // positions libres : séries = pas courts qui se courbent et rebondissent sur le bord, sauts = distance selon le temps écarté, doubles = symétrique
+  const r = seeded(seed | 0), B = TH.LIM;
+  let x = 0, y = 0, a = r() * 6.283, cur = (r() - .5) * .5, pt = -9, pu = 0, pv = 0, i = 0;
+  return notes.map(n => {
+    const dt = n.t - pt, col = TH.COL[i++ & 1];
+    if (dt < .001) return {...n, len: 0, col, u: Math.hypot(pu, pv) < .4 ? pu + .8 : -pu, v: Math.hypot(pu, pv) < .4 ? pv : -pv};
+    if (dt < .24) {
+      if (r() < .1) cur = (r() - .5) * .7;
+      a += cur + (r() - .5) * .2; x += Math.cos(a) * .3; y += Math.sin(a) * .3;
+      if (Math.abs(x) > B) { a = Math.PI - a; x = thClamp(x, -B, B); } if (Math.abs(y) > B) { a = -a; y = thClamp(y, -B, B); }
+    } else {
+      const d = Math.min(1.6, .6 + dt * 1.4);
+      for (let k = 0; k < 8; k++) { a = r() * 6.283; const nx = x + Math.cos(a) * d, ny = y + Math.sin(a) * d; if (Math.abs(nx) <= B && Math.abs(ny) <= B) { x = nx; y = ny; break; } if (k === 7) { x = (r() * 2 - 1) * B; y = (r() * 2 - 1) * B; } }
+      cur = (r() - .5) * .5;
+    }
+    pt = n.t; pu = x; pv = y;
+    return {...n, len: 0, col, u: x, v: y};
+  });
+}
+function thSfx(kind) {  // le « pop » d'une note touchée (plus aigu quand c'est précis), un son sourd si elle est ratée
+  if (!rhCtx || !rhOut) return;
+  const c = rhCtx, t = c.currentTime, g = c.createGain(), o = c.createOscillator(); g.connect(rhOut); o.connect(g);
+  if (kind === 'miss') { if (t - (rh.lastMiss || 0) < .12) return; rh.lastMiss = t; o.type = 'triangle'; o.frequency.setValueAtTime(150, t); o.frequency.exponentialRampToValueAtTime(55, t + .13); g.gain.setValueAtTime(.4, t); g.gain.exponentialRampToValueAtTime(.0001, t + .15); o.start(t); o.stop(t + .16); return; }
+  const f = kind === 'PARFAIT' ? 1900 : kind === 'BIEN' ? 1500 : 1150;
+  o.type = 'sine'; o.frequency.setValueAtTime(f, t); o.frequency.exponentialRampToValueAtTime(f * .6, t + .06); g.gain.setValueAtTime(.7, t); g.gain.exponentialRampToValueAtTime(.0001, t + .07); o.start(t); o.stop(t + .08);
+  const n = c.createBufferSource(), fl = c.createBiquadFilter(), g2 = c.createGain(); n.buffer = rhNoise; fl.type = 'highpass'; fl.frequency.value = 5000; g2.gain.setValueAtTime(.3, t); g2.gain.exponentialRampToValueAtTime(.0001, t + .03);
+  n.connect(fl).connect(g2).connect(rhOut); n.start(t, Math.random() * .5); n.stop(t + .04);
+}
+const thPos = n => [TH.CX + n.u * TH.K, TH.CY + n.v * TH.K];
+function rhJudge(n, d) {  // d : distance du curseur au centre de la note (0 = pile dessus, 1 = au bord)
   const w = TH.GRADES.find(w => d <= w[0]);
   n.judged = true; rh.combo++; rh.maxCombo = Math.max(rh.maxCombo, rh.combo); rh.counts[w[1]]++;
   rh.score += Math.round(w[2] * (1 + Math.min(rh.combo, 100) / 100));
-  rh.judge = {text: w[1], color: w[3], t: 30};
-  const [x, y] = thPos(n.cell);
-  for (let i = 0; i < 8; i++) rh.sparks.push({x, y, vx: (Math.random() - .5) * 3, vy: (Math.random() - .5) * 3, life: 18, color: RH.COLORS[n.cell % 4]});
+  rh.judge = {text: w[1], color: w[3], t: 30}; thSfx(w[1]);
+  const [x, y] = thPos(n); rh.fx.push({x, y, col: n.col, t: 0, hit: true});
+  for (let i = 0; i < 6; i++) rh.sparks.push({x, y, vx: (Math.random() - .5) * 2.5, vy: (Math.random() - .5) * 2.5, life: 16, color: n.col});
 }
-function rhMiss(n) { n.judged = true; n.missed = true; rh.combo = 0; rh.counts['RATÉ']++; rh.judge = {text: 'RATÉ', color: '#ff4f6d', t: 30}; }
+function rhMiss(n) { n.judged = true; n.missed = true; rh.combo = 0; rh.counts['RATÉ']++; rh.judge = {text: 'RATÉ', color: '#ff4f6d', t: 30}; thSfx('miss'); const [x, y] = thPos(n); rh.fx.push({x, y, col: '#ff4f6d', t: 0, hit: false}); }
 function rhUpdate() {
   const now = rhNow(), ahead = rhCtx.currentTime + .15;
   while (rh.ev < rh.c.events.length && rh.t0 + rh.c.events[rh.ev].t < ahead) { const e = rh.c.events[rh.ev++], when = rh.t0 + e.t; if (when >= rhCtx.currentTime - .02) rhSound(e, Math.max(when, rhCtx.currentTime)); }
   for (const n of rh.notes) {
     if (n.judged || now < n.t - TH.PAD[0]) continue;
-    const [x, y] = thPos(n.cell), dx = Math.abs(rh.mx - x), dy = Math.abs(rh.my - y);
-    if (dx <= TH.HALF && dy <= TH.HALF) rhJudge(n, Math.max(dx, dy) / TH.HALF * .8);
+    const [x, y] = thPos(n), dx = Math.abs(rh.mx - x), dy = Math.abs(rh.my - y);
+    if (dx <= TH.HALF && dy <= TH.HALF) rhJudge(n, Math.max(dx, dy) / TH.HALF);
     else if (now > n.t + TH.PAD[1]) rhMiss(n);
   }
   for (const s of rh.sparks) { s.x += s.vx; s.y += s.vy; s.life--; } rh.sparks = rh.sparks.filter(s => s.life > 0);
-  rh.trail.push([rh.mx, rh.my]); if (rh.trail.length > 6) rh.trail.shift();
+  for (const f of rh.fx) f.t++; rh.fx = rh.fx.filter(f => f.t < 16);
+  rh.trail.push([rh.mx, rh.my]); if (rh.trail.length > 10) rh.trail.shift();
+  rh.vx += (TH.CX + (rh.mx - TH.CX) * .3 - rh.vx) * .08; rh.vy += (TH.CY + (rh.my - TH.CY) * .3 - rh.vy) * .08;  // la caméra suit doucement le curseur
   if (rh.judge && --rh.judge.t <= 0) rh.judge = null;
   if (now > rh.c.len + 1.5) {
-    rh.mode = 'over'; try { rh.src?.stop(); } catch {}
+    rh.mode = 'over'; try { rh.src?.stop(); } catch {} try { document.exitPointerLock(); } catch {}
     const n = rh.notes.length, acc = n ? (rh.counts.PARFAIT * 300 + rh.counts.BIEN * 200 + rh.counts.OK * 100) / (n * 300) : 0;
     rh.acc = acc; rh.grade = acc >= .95 ? 'S' : acc >= .9 ? 'A' : acc >= .8 ? 'B' : acc >= .7 ? 'C' : 'D';
     const k = rh.info.key, res = gstore('neotha', {}); rh.record = best(k, rh.score);
@@ -421,37 +453,54 @@ function rhUpdate() {
     saveGames(); sfx('SAB'.includes(rh.grade) ? 'launch' : 'notify'); rhList();
   }
 }
+function thSquare(g, x, y, h, col, alpha, lw) {  // un carré creux lumineux
+  g.globalAlpha = alpha; g.shadowColor = col; g.shadowBlur = 6; g.strokeStyle = col; g.lineWidth = lw;
+  g.strokeRect(x - h, y - h, h * 2, h * 2); g.shadowBlur = 0;
+  g.globalAlpha = alpha * .12; g.fillStyle = col; g.fillRect(x - h, y - h, h * 2, h * 2); g.globalAlpha = 1;
+}
 function rhDraw() {
-  const g = rh.g, {W, H, CX, CY, CELL, HALF} = TH, now = rhCtx && rh.mode !== 'ready' ? rhNow() : -2, appr = 2.4 / +$('rhSpeed').value;
-  const beat = 60 / rh.info.bpm, pulse = now > 0 ? Math.max(0, 1 - (now % beat) / beat * 2) : 0;
-  g.fillStyle = '#07021a'; g.fillRect(0, 0, W, H);
-  // tunnel : des cadres qui s'éloignent vers le centre, au rythme de la musique
-  for (let k = 0; k < 6; k++) {
-    const s = 1 - ((k + (now > 0 ? (now / beat) % 1 : 0)) / 6), w = 150 * 3.4 * s * s + 8; if (s <= 0) continue;
-    g.strokeStyle = `rgba(${k % 2 ? '90,70,190' : '255,90,217'},${.05 + s * .1 + pulse * .08})`; g.strokeRect(Math.round(CX - w / 2) + .5, Math.round(CY - w * .3) + .5, Math.round(w), Math.round(w * .6));
+  const g = rh.g, {W, H, CX, CY, K, HALF, DEPTH} = TH, now = rhCtx && rh.mode !== 'ready' ? rhNow() : -2, appr = 2.4 / +$('rhSpeed').value;
+  const beat = 60 / rh.info.bpm, pulse = now > 0 ? Math.max(0, 1 - (now % beat) / beat * 2) : 0, VX = rh.vx, VY = rh.vy, t = now > 0 ? now : 0;
+  g.setTransform(g.canvas.width / W, 0, 0, g.canvas.width / W, 0, 0); g.lineJoin = 'round';
+  const bg = g.createRadialGradient(VX, VY, 10, VX, VY, 260); bg.addColorStop(0, '#190a38'); bg.addColorStop(1, '#04010c'); g.fillStyle = bg; g.fillRect(0, 0, W, H);
+  // tunnel : des cadres qui viennent vers toi et des traînées d'étoiles, au rythme de la musique
+  for (let k = 0; k < 10; k++) {
+    const ph = (((k / 10 - t * .3) % 1) + 1) % 1, s = 1 / (1 + ph * DEPTH * 1.6), h = 2 * K * s * 1.8;
+    g.strokeStyle = `rgba(${k % 2 ? '120,100,230' : '255,90,217'},${(1 - ph) * (.1 + pulse * .12)})`; g.lineWidth = .6 + s; g.strokeRect(VX - h * 1.6, VY - h * .9, h * 3.2, h * 1.8);
   }
-  for (let c = 0; c < 9; c++) { const [x, y] = thPos(c); g.strokeStyle = `rgba(143,123,184,${.35 + pulse * .3})`; g.strokeRect(x - HALF + .5, y - HALF + .5, HALF * 2, HALF * 2); }
-  // les notes : elles grossissent en venant du fond et se posent sur leur case à l'heure exacte
+  for (let i = 0; i < 30; i++) {
+    const a = i * 2.399, ph = (((i * .173 - t * .5) % 1) + 1) % 1, r0 = ph * ph * 280, r1 = r0 + ph * 22;
+    g.strokeStyle = `rgba(217,198,255,${ph * .45})`; g.lineWidth = .7; g.beginPath(); g.moveTo(VX + Math.cos(a) * r0, VY + Math.sin(a) * r0 * .6); g.lineTo(VX + Math.cos(a) * r1, VY + Math.sin(a) * r1 * .6); g.stroke();
+  }
+  // le champ de jeu : quatre coins et un repère au centre (pas de cases)
+  g.strokeStyle = `rgba(217,198,255,${.28 + pulse * .3})`; g.lineWidth = 1; const F = 1.45 * K;
+  for (const [sx, sy] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) { g.beginPath(); g.moveTo(CX + sx * F, CY + sy * (F - 12)); g.lineTo(CX + sx * F, CY + sy * F); g.lineTo(CX + sx * (F - 12), CY + sy * F); g.stroke(); }
+  // les notes, du fond vers l'avant ; une note ratée continue sa route et s'efface
   const vis = rh.notes.filter(n => !n.judged && n.t - now < appr && n.t - now > -.2).sort((a, b) => b.t - a.t);
   for (const n of vis) {
-    const z = Math.max(0, (n.t - now) / appr), s = 1 - z * .85, [x, y] = thPos(n.cell), px0 = CX + (x - CX) * s, py0 = CY + (y - CY) * s, w = Math.max(3, HALF * 2 * s);
-    g.globalAlpha = Math.min(1, 1.4 - z);
-    px(g, '#05010b', px0 - w / 2 - 1, py0 - w / 2 - 1, w + 2, w + 2); px(g, RH.COLORS[n.cell % 4], px0 - w / 2, py0 - w / 2, w, w); px(g, 'rgba(255,255,255,.55)', px0 - w / 2 + 1, py0 - w / 2 + 1, Math.max(1, w - 2), 2);
-    g.globalAlpha = 1;
+    const z = Math.max(0, (n.t - now) / appr), s = 1 / (1 + z * DEPTH), [x, y] = thPos(n), px0 = VX + (x - VX) * s, py0 = VY + (y - VY) * s;
+    thSquare(g, px0, py0, HALF * s, n.col, Math.min(1, (1 - z) * 3), 1 + 1.4 * s);
+    if (s > .5) px(g, '#ffffff', px0 - 1, py0 - 1, 2, 2);
   }
-  for (const s of rh.sparks) px(g, s.color, s.x, s.y, 2, 2);
-  rh.trail.forEach(([x, y], i) => px(g, `rgba(255,255,255,${(i + 1) / 14})`, x - 1, y - 1, 3, 3));
-  px(g, '#05010b', rh.mx - 4, rh.my - 4, 9, 9); px(g, '#ffffff', rh.mx - 3, rh.my - 3, 7, 7); px(g, '#ff5ad9', rh.mx - 1, rh.my - 1, 3, 3);
-  px(g, 'rgba(11,3,28,.85)', 0, 0, W, 16);
+  for (const f of rh.fx) { const k = f.t / 16, h = HALF * (1 + k * (f.hit ? .9 : .5)); thSquare(g, f.x, f.y, h, f.hit ? '#ffffff' : f.col, 1 - k, 2 - k * 1.5); if (f.hit) thSquare(g, f.x, f.y, h * .6, f.col, (1 - k) * .8, 1); }
+  for (const s of rh.sparks) { g.globalAlpha = s.life / 16; px(g, s.color, s.x, s.y, 2, 2); g.globalAlpha = 1; }
+  // le curseur et sa traînée
+  g.lineWidth = 3; g.lineCap = 'round';
+  for (let i = 1; i < rh.trail.length; i++) { g.strokeStyle = `rgba(255,255,255,${i / rh.trail.length * .5})`; g.beginPath(); g.moveTo(rh.trail[i - 1][0], rh.trail[i - 1][1]); g.lineTo(rh.trail[i][0], rh.trail[i][1]); g.stroke(); }
+  g.lineCap = 'butt'; g.shadowColor = '#ff5ad9'; g.shadowBlur = 8; g.fillStyle = '#ffffff'; g.fillRect(rh.mx - 3, rh.my - 3, 6, 6); g.shadowBlur = 0;
+  // interface
+  g.fillStyle = 'rgba(11,3,28,.7)'; g.fillRect(0, 0, W, 16);
   pxFont(g, String(rh.score).padStart(7, '0'), 4, 11, '#ffffff', 7);
   const title = rh.info.name.length > 30 ? rh.info.name.slice(0, 29) + '…' : rh.info.name;
   pxFont(g, title, W - 4, 11, '#d9c6ff', 6, 'right');
-  px(g, '#2a1d52', 0, 16, W, 2); px(g, '#ff5ad9', 0, 16, Math.max(0, Math.min(1, now / rh.c.len)) * W, 2);
-  if (rh.combo >= 5) pxFont(g, rh.combo + ' COMBO', CX, 40, '#ffffff', 10, 'center');
-  if (rh.judge) pxFont(g, rh.judge.text, CX, 192 - (30 - rh.judge.t) / 3, rh.judge.color, 9, 'center');
+  const done = rh.counts.PARFAIT + rh.counts.BIEN + rh.counts.OK + rh.counts['RATÉ'], acc = done ? (rh.counts.PARFAIT * 300 + rh.counts.BIEN * 200 + rh.counts.OK * 100) / (done * 300) : 1;
+  pxFont(g, (acc * 100).toFixed(1) + '%', W / 2, 11, '#8f7bb8', 6, 'center');
+  px(g, '#2a1d52', 0, 16, W, 2); px(g, '#ff5ad9', 0, 16, thClamp(now / rh.c.len, 0, 1) * W, 2);
+  if (rh.combo >= 5) pxFont(g, rh.combo + 'x', CX, 200, '#ffffff', 10 + Math.min(4, rh.combo / 40) + pulse * 2, 'center');
+  if (rh.judge) pxFont(g, rh.judge.text, CX, 36 - (30 - rh.judge.t) / 6, rh.judge.color, 8, 'center');
   if (rh.mode === 'play' && now < 0) pxFont(g, String(Math.ceil(-now)), CX, 40, '#ffd07a', 16, 'center');
-  if (rh.mode === 'ready') gameText(g, W, [[title.toUpperCase(), '#ff5ad9', 8], [RH_DIFFS[rh.diff] + ' · ' + rh.notes.length + ' notes', '#d9c6ff'], ['Espace ou clic : jouer', '#ffd07a'], ['Survole les notes avec la souris', '#8f7bb8']], 90);
-  if (rh.mode === 'pause') gameText(g, W, [['PAUSE', '#ffffff', 12], ['Espace : reprendre', '#d9c6ff']], 100);
+  if (rh.mode === 'ready') gameText(g, W, [[title.toUpperCase(), '#ff5ad9', 8], [RH_DIFFS[rh.diff] + ' · ' + rh.notes.length + ' notes', '#d9c6ff'], ['Espace ou clic : jouer', '#ffd07a'], ['Bouge la souris sur les notes', '#8f7bb8']], 90);
+  if (rh.mode === 'pause') gameText(g, W, [['PAUSE', '#ffffff', 12], ['Espace ou clic : reprendre', '#d9c6ff']], 100);
   if (rh.mode === 'over') gameText(g, W, [['NOTE ' + rh.grade, rh.grade === 'S' ? '#ffd07a' : '#ff5ad9', 14], [rh.score + ' points', '#ffffff'], ['Précision ' + (rh.acc * 100).toFixed(1) + ' %', '#d9c6ff'], ['Combo max ' + rh.maxCombo, '#d9c6ff'], ['P ' + rh.counts.PARFAIT + ' · B ' + rh.counts.BIEN + ' · OK ' + rh.counts.OK + ' · X ' + rh.counts['RATÉ'], '#8f7bb8'], [rh.record ? 'NOUVEAU RECORD !' : 'Espace : rejouer', '#ffd07a']], 60);
 }
 
@@ -505,14 +554,21 @@ $('rhFile').onchange = async e => {
 };
 $('rhMuBtn').onclick = () => { const t = $('rhMuList')._songs?.find(x => muId(x) === $('rhMuList').value); if (t) rhAddImport({id: muId(t), name: t.display_title || t.file, file: t.file || '', url: t.url || ''}); };
 setInterval(() => { if (rhCtx?.state === 'running' && (!view.classList.contains('on') || rh?.mode !== 'play')) rhCtx.suspend(); }, 200);  // the music stops with the game
-const thAim = e => { if (!rh) return; const r = $('rhCanvas').getBoundingClientRect(); rh.mx = Math.max(0, Math.min(TH.W, (e.clientX - r.left) / r.width * TH.W)); rh.my = Math.max(0, Math.min(TH.H, (e.clientY - r.top) / r.height * TH.H)); };
-$('rhCanvas').onpointermove = thAim;
-$('rhCanvas').onpointerdown = e => { thAim(e); if (rh && rh.mode !== 'play') rhPress(); };
+const thCv = () => $('rhCanvas');
+const thLock = () => { try { thCv().requestPointerLock?.(); } catch {} };  // comme dans Rhythia : la souris est capturée pendant la partie (Échap pour la libérer)
+const thAim = e => {
+  if (!rh) return; const r = thCv().getBoundingClientRect();
+  if (document.pointerLockElement === thCv()) { rh.mx = thClamp(rh.mx + e.movementX / r.width * TH.W * 1.5, 0, TH.W); rh.my = thClamp(rh.my + e.movementY / r.width * TH.W * 1.5, 0, TH.H); }
+  else { rh.mx = thClamp((e.clientX - r.left) / r.width * TH.W, 0, TH.W); rh.my = thClamp((e.clientY - r.top) / r.height * TH.H, 0, TH.H); }
+};
+thCv().onpointermove = thAim;
+thCv().onpointerdown = e => { if (!rh) return; if (document.pointerLockElement !== thCv()) thAim(e); if (rh.mode !== 'play') { rhPress(); if (rh.mode === 'play') thLock(); } };
+document.addEventListener('pointerlockchange', () => { if (document.pointerLockElement !== thCv() && rh?.mode === 'play') { rh.mode = 'pause'; rhCtx?.suspend(); } });
 document.addEventListener('keydown', e => {
   if (/INPUT|TEXTAREA|SELECT/.test(e.target.tagName) || !view.classList.contains('on') || !rh) return;
   const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
-  if (k === ' ') { e.preventDefault(); if (!e.repeat && rh.mode !== 'play') rhPress(); }
-  if ((k === 'p' || k === 'Escape') && rh.mode === 'play') { rh.mode = 'pause'; rhCtx?.suspend(); }
+  if (k === ' ') { e.preventDefault(); if (!e.repeat && rh.mode !== 'play') { rhPress(); if (rh.mode === 'play') thLock(); } }
+  if (k === 'p' && rh.mode === 'play') { rh.mode = 'pause'; rhCtx?.suspend(); try { document.exitPointerLock(); } catch {} }
 });
 
 $('rhVol').oninput = () => { if (rhOut) rhOut.gain.value = +$('rhVol').value / 100 * .6; };
