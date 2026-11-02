@@ -1,6 +1,6 @@
 const HTML = `<div class="appWrap wide">
   <div class="agHead"><span class="label">NeoTha</span><span class="hint">Souris : touche chaque note quand elle arrive · espace : jouer · P : pause · Échap : libère la souris</span></div>
-  <div class="rhMain"><div class="thBox"><canvas id="rhCanvas" width="1152" height="648"></canvas></div>
+  <div class="rhMain"><div class="thBox"><canvas id="rhCanvas" width="1152" height="648"></canvas><button class="btn px rhFs" id="rhFs">PLEIN ÉCRAN</button></div>
     <div class="rhSide"><div class="rhTabs"><button class="tab px on" id="rhTabSongs">CHANSONS</button><button class="tab px" id="rhTabMine">MES MUSIQUES</button></div>
       <div class="sysCard px rhImport" id="rhImport" style="display:none"><div class="row"><button class="btn main px" id="rhFileBtn">IMPORTER UN FICHIER AUDIO</button><input type="file" id="rhFile" accept="audio/*,.mp3,.m4a,.ogg,.opus,.wav,.flac,.webm" hidden></div>
         <div class="row"><select class="f gSel" id="rhMuList"></select><button class="btn px" id="rhMuBtn">CRÉER LE NIVEAU</button></div>
@@ -11,7 +11,12 @@ const HTML = `<div class="appWrap wide">
         <label>Décalage audio <select class="f gSel" id="rhOffset"><option value="-120">-120 ms</option><option value="-80">-80 ms</option><option value="-40">-40 ms</option><option value="0" selected>0 ms</option><option value="40">+40 ms</option><option value="80">+80 ms</option><option value="120">+120 ms</option></select></label></div></div></div>
   <div class="hint">Comme Rhythia : les notes arrivent du fond du tunnel, partout dans le champ, parfois en longues séries. Passe le curseur dessus à l'instant où elles arrivent ; plus tu es au centre, meilleure est la note. La souris est capturée pendant la partie.</div>
 </div>`;
-const CSS = `.thBox{display:grid;place-items:center;padding:10px;background:#05010b;box-shadow:0 0 0 3px var(--line2);flex:2;min-width:360px}
+const CSS = `.thBox{position:relative}
+.rhFs{position:absolute;top:14px;right:14px;opacity:.85}
+.thBox:fullscreen .rhFs{display:none}
+.thBox:fullscreen{padding:0}
+.thBox:fullscreen canvas{width:min(100vw,177.78vh)}
+.thBox{display:grid;place-items:center;padding:10px;background:#05010b;box-shadow:0 0 0 3px var(--line2);flex:2;min-width:360px}
 .thBox canvas{width:100%;aspect-ratio:384/216;cursor:none}
 .gSel{appearance:none;-webkit-appearance:none;width:auto;font:inherit;font-size:13px;padding:7px 28px 7px 10px;margin-right:8px;color:#d9c6ff;background:#100830 url("data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%2710%27 height=%276%27%3E%3Cpath d=%27M0 0h10L5 6z%27 fill=%27%23ff5ad9%27/%3E%3C/svg%3E") no-repeat right 9px center;border:2px solid #2a1d52;border-radius:0;cursor:pointer}
 .gSel:focus{outline:none;border-color:#ff5ad9}
@@ -447,7 +452,7 @@ function rhUpdate() {
   rh.vx += (TH.CX + (rh.mx - TH.CX) * .3 - rh.vx) * .08; rh.vy += (TH.CY + (rh.my - TH.CY) * .3 - rh.vy) * .08;  // la caméra suit doucement le curseur
   if (rh.judge && --rh.judge.t <= 0) rh.judge = null;
   if (now > rh.c.len + 1.5) {
-    rh.mode = 'over'; try { rh.src?.stop(); } catch {} try { document.exitPointerLock(); } catch {}
+    rh.mode = 'over'; try { rh.src?.stop(); } catch {} try { if (document.fullscreenElement) document.exitFullscreen(); } catch {} try { document.exitPointerLock(); } catch {}
     const n = rh.notes.length, acc = n ? (rh.counts.PARFAIT * 300 + rh.counts.BIEN * 200 + rh.counts.OK * 100) / (n * 300) : 0;
     rh.acc = acc; rh.grade = acc >= .95 ? 'S' : acc >= .9 ? 'A' : acc >= .8 ? 'B' : acc >= .7 ? 'C' : 'D';
     const k = rh.info.key, res = gstore('neotha', {}); rh.record = best(k, rh.score);
@@ -573,6 +578,7 @@ document.addEventListener('keydown', e => {
   if (k === 'p' && rh.mode === 'play') { rh.mode = 'pause'; rhCtx?.suspend(); try { document.exitPointerLock(); } catch {} }
 });
 
+$('rhFs').onclick = () => { if (document.fullscreenElement) document.exitFullscreen(); else $('rhCanvas').parentElement.requestFullscreen?.().catch(() => {}); };  // plein écran jusqu'à la fin de la partie
 $('rhVol').oninput = () => { if (rhOut) rhOut.gain.value = +$('rhVol').value / 100 * .6; };
 for (const id of ['rhVol', 'rhSpeed', 'rhOffset']) $(id).addEventListener('change', () => { gstore('neothaPrefs', {})[id] = $(id).value; saveGames(); });
 function rhOpen() {
