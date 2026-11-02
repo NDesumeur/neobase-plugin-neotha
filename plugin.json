@@ -1,7 +1,7 @@
 {
   "id": "neobase.neotha",
   "name": "NeoTha",
-  "version": "1.1.2",
+  "version": "1.1.3",
   "author": "NDesumeur",
   "description": "Un jeu de rythme Ã  la souris : les notes arrivent dans un tunnel sur une grille 3Ã—3, survole-les en rythme. Les 200 morceaux de Rythme, ou n'importe quelle musique de NeoMusic.",
   "icon": "icon.png",

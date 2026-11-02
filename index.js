@@ -1,6 +1,6 @@
 const HTML = `<div class="appWrap wide">
   <div class="agHead"><span class="label">NeoTha</span><span class="hint">Souris : touche chaque note quand elle arrive · espace : jouer · P : pause · Échap : libère la souris</span></div>
-  <div class="rhMain"><div class="thBox"><canvas id="rhCanvas" width="1152" height="648"></canvas><button class="btn px rhFs" id="rhFs">PLEIN ÉCRAN</button></div>
+  <div class="rhMain"><div class="thBox"><canvas id="rhCanvas" width="768" height="432"></canvas><button class="btn px rhFs" id="rhFs">PLEIN ÉCRAN</button></div>
     <div class="rhSide"><div class="rhTabs"><button class="tab px on" id="rhTabSongs">CHANSONS</button><button class="tab px" id="rhTabMine">MES MUSIQUES</button></div>
       <div class="sysCard px rhImport" id="rhImport" style="display:none"><div class="row"><button class="btn main px" id="rhFileBtn">IMPORTER UN FICHIER AUDIO</button><input type="file" id="rhFile" accept="audio/*,.mp3,.m4a,.ogg,.opus,.wav,.flac,.webm" hidden></div>
         <div class="row"><select class="f gSel" id="rhMuList"></select><button class="btn px" id="rhMuBtn">CRÉER LE NIVEAU</button></div>
@@ -349,8 +349,8 @@ function rhAudio() {
   if (!rhOut) { rhOut = rhCtx.createGain(); rhOut.connect(rhCtx.destination); }
   rhOut.gain.value = +$('rhVol').value / 100 * .6;
 }
-function rhSound(e, when) {
-  const c = rhCtx, g = c.createGain(); g.connect(rhOut);
+function rhSound(e, when, c = rhCtx, out = rhOut) {
+  const g = c.createGain(); g.connect(out);
   const env = (a, d, v) => { g.gain.setValueAtTime(0, when); g.gain.linearRampToValueAtTime(v, when + a); g.gain.exponentialRampToValueAtTime(.0001, when + d); };
   if (e.k === 'kick') { const o = c.createOscillator(); o.frequency.setValueAtTime(150, when); o.frequency.exponentialRampToValueAtTime(40, when + .12); env(.002, .22, .9 * e.v); o.connect(g); o.start(when); o.stop(when + .25); }
   else if (e.k === 'snare' || e.k === 'hat') {
@@ -363,19 +363,53 @@ function rhSound(e, when) {
     o.connect(g); o.start(when); o.stop(when + e.d + .06);
   }
 }
+// le morceau est « cuit » d'avance en un seul son (hors temps réel) : plus aucun instrument à créer pendant la partie, donc plus de saccades
+const rhRendered = new Map();
+async function rhRenderSong(i, c) {  // synthèse faite à la main dans un tableau (le moteur audio hors temps réel mettait plus de 20 s)
+  if (rhRendered.has(i)) return rhRendered.get(i);
+  toast('Préparation du niveau…'); await new Promise(r => setTimeout(r, 40));
+  rhAudio();
+  const R = 44100, N = Math.ceil((c.len + 1.5) * R), out = new Float32Array(N), nz = rhNoise.getChannelData(0), TAU = 2 * Math.PI;
+  const biquad = (type, f) => { const w = TAU * f / R, al = Math.sin(w) / 2, cw = Math.cos(w), a0 = 1 + al, b = type === 'hp' ? [(1 + cw) / 2, -(1 + cw), (1 + cw) / 2] : [al, 0, -al]; return {b0: b[0] / a0, b1: b[1] / a0, b2: b[2] / a0, a1: -2 * cw / a0, a2: (1 - al) / a0}; };
+  const HP = biquad('hp', 7000), BP = biquad('bp', 1800), expo = (a, t, T) => a * Math.pow(.0001 / a, t / T);
+  for (const e of c.events) {
+    const s0 = Math.floor(e.t * R); if (s0 >= N) continue;
+    if (e.k === 'kick') {
+      let ph = 0; const L = Math.min(N - s0, Math.floor(.25 * R)), v = .9 * e.v;
+      for (let n = 0; n < L; n++) { const t = n / R, f = 150 * Math.pow(40 / 150, Math.min(t, .12) / .12); ph += TAU * f / R; out[s0 + n] += Math.sin(ph) * (t < .002 ? v * t / .002 : expo(v, t - .002, .218)); }
+    } else if (e.k === 'snare' || e.k === 'hat') {
+      const hat = e.k === 'hat', q = hat ? HP : BP, d = hat ? .045 : .17, v = (hat ? .25 : .55) * e.v, L = Math.min(N - s0, Math.floor((d + .02) * R));
+      let x1 = 0, x2 = 0, y1 = 0, y2 = 0, o = Math.floor(Math.random() * nz.length * .5);
+      for (let n = 0; n < L; n++) { const t = n / R, x = nz[(o + n) % nz.length], y = q.b0 * x + q.b1 * x1 + q.b2 * x2 - q.a1 * y1 - q.a2 * y2; x2 = x1; x1 = x; y2 = y1; y1 = y; out[s0 + n] += y * (t < .001 ? v * t / .001 : t < d ? expo(v, t - .001, d - .001) : 0); }
+    } else {
+      const lead = e.k === 'lead', w = lead ? e.w || 'square' : 'triangle', v1 = e.v * (lead ? .55 : 1), v2 = e.v * (lead ? .4 : .7), tm = Math.min(e.d, .08), T = e.d + .04, L = Math.min(N - s0, Math.floor((e.d + .06) * R)), inc = e.f / R;
+      let ph = 0;
+      for (let n = 0; n < L; n++) {
+        const t = n / R; ph += inc; if (ph >= 1) ph -= 1;
+        const s = w === 'square' ? (ph < .5 ? 1 : -1) : w === 'sawtooth' ? 2 * ph - 1 : w === 'sine' ? Math.sin(TAU * ph) : 1 - 4 * Math.abs(ph - .5);
+        out[s0 + n] += s * (t < .006 ? v1 * t / .006 : t < tm ? v1 : t < T ? expo(v2, t - tm, T - tm) : 0);
+      }
+    }
+  }
+  for (let n = 0; n < N; n++) out[n] = Math.max(-1, Math.min(1, out[n] * .6));
+  const buf = rhCtx.createBuffer(1, N, R); buf.copyToChannel(out, 0); rhRendered.set(i, buf); return buf;
+}
+let rhTok = 0;
 // i: index of a song of the game, or the id of an imported music
 async function rhSelect(i, diff) {
-  let info, c, notes;
-  if (typeof i === 'number') { const song = RH_SONGS[i] || RH_SONGS[0]; c = rhCompose(song); notes = rhChart(c, diff); info = {name: song.name, bpm: song.bpm, key: 'rh' + RH_SONGS.indexOf(song) + diff}; }
+  let info, c, notes; const tok = ++rhTok;
+  if (typeof i === 'number') { const song = RH_SONGS[i] || RH_SONGS[0]; c = rhCompose(song); notes = rhChart(c, diff); info = {name: song.name, bpm: song.bpm, key: 'rh' + RH_SONGS.indexOf(song) + diff};
+    const buffer = await rhRenderSong(RH_SONGS.indexOf(song), c); c = {events: [], lead: [], len: c.len, step: c.step, buffer}; }
   else {
     const imp = rhImports().find(x => x.id === i); if (!imp) return rhSelect(0, diff);
     const {a, buffer} = await rhLoadImport(imp);
     c = {events: [], lead: [], len: a.len, step: a.beat / 4, buffer}; notes = rhChartImport(a, diff); info = {name: imp.name, bpm: a.bpm, key: 'rhx' + imp.id + diff};
   }
   notes = thLayout(thStreams(notes, c, diff), info.name.length * 977 + Math.round(info.bpm * 10));
+  if (tok !== rhTok) return;  // un autre niveau a été choisi entre-temps
   try { rh?.src?.stop(); } catch {}
   rh = rh || {raf: 0};
-  Object.assign(rh, {g: $('rhCanvas').getContext('2d'), mode: 'ready', tick: 0, song: i, diff, c, info, notes, src: null, ev: 0, t0: 0, score: 0, combo: 0, maxCombo: 0, counts: {PARFAIT: 0, BIEN: 0, OK: 0, RATÉ: 0}, judge: null, mx: 192, my: 112, vx: 192, vy: 112, trail: [], fx: [], i0: 0, bg: null, rect: null, sparks: [], done: false});
+  Object.assign(rh, {g: $('rhCanvas').getContext('2d'), mode: 'ready', tick: 0, song: i, diff, c, info, notes, src: null, ev: 0, t0: 0, score: 0, combo: 0, maxCombo: 0, counts: {PARFAIT: 0, BIEN: 0, OK: 0, RATÉ: 0}, judge: null, mx: 192, my: 112, vx: 192, vy: 112, trail: [], cp: 0, cm: 0, fx: [], i0: 0, bg: null, rect: null, sparks: [], done: false});
   games.neothaLast = {song: i, diff}; rhList();
   gameLoop(rh, 'neodyme:neotha', rhUpdate, rhDraw);
 }
@@ -431,11 +465,11 @@ const thPos = n => [TH.CX + n.u * TH.K, TH.CY + n.v * TH.K];
 function rhJudge(n) {  // la note est touchée : réussie, sans nuance
   n.judged = true; rh.combo++; rh.maxCombo = Math.max(rh.maxCombo, rh.combo); rh.counts.PARFAIT++;
   rh.score += Math.round(300 * (1 + Math.min(rh.combo, 100) / 100));
-  rh.judge = {text: 'RÉUSSI', color: '#8ee8a0', t: 30}; thSfx('hit');
+  rh.judge = {text: 'RÉUSSI', color: '#8ee8a0', t: 30}; thSfx('hit'); rh.cp = 1;
   const [x, y] = thPos(n); rh.fx.push({x, y, col: n.col, t: 0, hit: true});
   for (let i = 0; i < 6; i++) rh.sparks.push({x, y, vx: (Math.random() - .5) * 2.5, vy: (Math.random() - .5) * 2.5, life: 16, color: n.col});
 }
-function rhMiss(n) { n.judged = true; n.missed = true; rh.combo = 0; rh.counts['RATÉ']++; rh.judge = {text: 'RATÉ', color: '#ff4f6d', t: 30}; thSfx('miss'); const [x, y] = thPos(n); rh.fx.push({x, y, col: '#ff4f6d', t: 0, hit: false}); }
+function rhMiss(n) { n.judged = true; n.missed = true; rh.combo = 0; rh.cm = 1; rh.counts['RATÉ']++; rh.judge = {text: 'RATÉ', color: '#ff4f6d', t: 30}; thSfx('miss'); const [x, y] = thPos(n); rh.fx.push({x, y, col: '#ff4f6d', t: 0, hit: false}); }
 function rhUpdate() {
   const now = rhNow(), ahead = rhCtx.currentTime + .15;
   while (rh.ev < rh.c.events.length && rh.t0 + rh.c.events[rh.ev].t < ahead) { const e = rh.c.events[rh.ev++], when = rh.t0 + e.t; if (when >= rhCtx.currentTime - .02) rhSound(e, Math.max(when, rhCtx.currentTime)); }
@@ -448,7 +482,7 @@ function rhUpdate() {
   }
   for (const s of rh.sparks) { s.x += s.vx; s.y += s.vy; s.life--; } rh.sparks = rh.sparks.filter(s => s.life > 0);
   for (const f of rh.fx) f.t++; rh.fx = rh.fx.filter(f => f.t < 16);
-  rh.trail.push([rh.mx, rh.my]); if (rh.trail.length > 10) rh.trail.shift();
+  rh.trail.push([rh.mx, rh.my]); if (rh.trail.length > 16) rh.trail.shift(); rh.cp *= .86; rh.cm *= .86;
   rh.vx += (TH.CX + (rh.mx - TH.CX) * .3 - rh.vx) * .08; rh.vy += (TH.CY + (rh.my - TH.CY) * .3 - rh.vy) * .08;  // la caméra suit doucement le curseur
   if (rh.judge && --rh.judge.t <= 0) rh.judge = null;
   if (now > rh.c.len + 1.5) {
@@ -494,10 +528,13 @@ function rhDraw() {
   }
   for (const f of rh.fx) { const k = f.t / 16, h = HALF * (1 + k * (f.hit ? .9 : .5)); thSquare(g, f.x, f.y, h, f.hit ? '#ffffff' : f.col, 1 - k, 2 - k * 1.5); if (f.hit) thSquare(g, f.x, f.y, h * .6, f.col, (1 - k) * .8, 1); }
   for (const s of rh.sparks) { g.globalAlpha = s.life / 16; px(g, s.color, s.x, s.y, 2, 2); g.globalAlpha = 1; }
-  // le curseur et sa traînée
-  g.lineWidth = 3; g.lineCap = 'round';
-  for (let i = 1; i < rh.trail.length; i++) { g.strokeStyle = `rgba(255,255,255,${i / rh.trail.length * .5})`; g.beginPath(); g.moveTo(rh.trail[i - 1][0], rh.trail[i - 1][1]); g.lineTo(rh.trail[i][0], rh.trail[i][1]); g.stroke(); }
-  g.lineCap = 'butt'; g.fillStyle = 'rgba(255,90,217,.35)'; g.fillRect(rh.mx - 5, rh.my - 5, 10, 10); g.fillStyle = '#ffffff'; g.fillRect(rh.mx - 3, rh.my - 3, 6, 6);
+  // le curseur : un anneau avec un point central, une traînée effilée, et il pulse quand une note est touchée (rouge si ratée)
+  const T = rh.trail; g.lineCap = 'round';
+  for (let k = 1; k < T.length; k++) { const q = k / T.length; g.strokeStyle = `rgba(255,160,235,${q * .55})`; g.lineWidth = .6 + q * 3.2; g.beginPath(); g.moveTo(T[k - 1][0], T[k - 1][1]); g.lineTo(T[k][0], T[k][1]); g.stroke(); }
+  g.lineCap = 'butt'; const cr = 5 + rh.cp * 4, cc = rh.cm > .05 ? '#ff4f6d' : '#ffffff';
+  g.globalAlpha = .25 + rh.cp * .4; g.strokeStyle = '#ff5ad9'; g.lineWidth = 3; g.beginPath(); g.arc(rh.mx, rh.my, cr + 2.5, 0, 6.283); g.stroke(); g.globalAlpha = 1;
+  g.strokeStyle = cc; g.lineWidth = 1.4; g.beginPath(); g.arc(rh.mx, rh.my, cr, 0, 6.283); g.stroke();
+  g.fillStyle = cc; g.beginPath(); g.arc(rh.mx, rh.my, 1.6, 0, 6.283); g.fill();
   // interface
   g.fillStyle = 'rgba(11,3,28,.7)'; g.fillRect(0, 0, W, 16);
   pxFont(g, String(rh.score).padStart(7, '0'), 4, 11, '#ffffff', 7);

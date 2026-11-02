@@ -1,9 +1,0 @@
-{
-  "pluginId": "neobase.neotha",
-  "repo": "NDesumeur/neobase-plugin-neotha",
-  "version": "1.1.2",
-  "sha256": "b2bff7083144bc53c2326591546c3f0755def6b63a29de5f629a82460ed97ecb",
-  "approvedAt": "2026-11-02T01:36:28.990Z",
-  "neobase": ">=4.1.0",
-  "signature": "M+nBgkMjnPhxRuTUNQxn47NsSJ12cuvVA453puIsmjAsJDjP8q04pUcUiiDv4SVw26bbb/jPkPBKEHx1R1qFDw=="
-}
