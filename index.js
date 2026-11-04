@@ -331,7 +331,7 @@ async function rhLoadImport(imp) {
   const src = has ? 'neoplugin://neobase.music/file/' + encodeURIComponent(imp.file) : imp.url ? 'neoplugin://neobase.music/stream/?u=' + encodeURIComponent(imp.url) : '';
   if (!src) throw new Error('le fichier de cette musique n\'est pas sur ce PC');
   rhAudio(); toast('Analyse de la musique…');
-  const buffer = await rhCtx.decodeAudioData(await (await fetch(src)).arrayBuffer()), a = await rhAnalyse(buffer), r = {a, buffer};
+  const buffer = await rhCtx.decodeAudioData(await neo.musicBuffer(src)), a = await rhAnalyse(buffer), r = {a, buffer};
   rhAnalysed.set(imp.id, r);
   if (imp.bpm !== a.bpm || !imp.len) { imp.bpm = a.bpm; imp.len = Math.round(a.len); saveGames(); }
   return r;
@@ -620,7 +620,7 @@ $('rhTabMine').onclick = () => { rhTab = 'mine'; rhList(); rhFillNeoMusic(); };
 $('rhFileBtn').onclick = () => $('rhFile').click();
 $('rhFile').onchange = async e => {
   const f = e.target.files[0]; e.target.value = ''; if (!f) return;
-  try { const file = await neo.musicAddFile(neo.pathOf(f)); rhAddImport({id: 'f:' + file, name: f.name.replace(/\.[^.]+$/, ''), file, stars: +$('rhStars').value}); }
+  try { const file = await neo.musicAddFile(await neo.pathOf(f)); rhAddImport({id: 'f:' + file, name: f.name.replace(/\.[^.]+$/, ''), file, stars: +$('rhStars').value}); }
   catch (err) { $('rhImpMsg').textContent = 'Import impossible : ' + err.message; }
 };
 $('rhMuBtn').onclick = () => { const t = $('rhMuList')._songs?.find(x => muId(x) === $('rhMuList').value); if (t) rhAddImport({id: muId(t), name: t.display_title || t.file, file: t.file || '', url: t.url || '', stars: +$('rhStars').value}); };
