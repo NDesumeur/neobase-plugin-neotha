@@ -40,14 +40,14 @@ const CSS = `.thBox{position:relative}
 export default async function (ctx) {
   const view = ctx.view;
   // le côté système de NeoMusic (fichiers, YouTube…) vit dans le main.js de son plugin : « neo.musicXxx » y est redirigé
-  const MU_ID = 'neobase.music', MU_EV = { onMusicHotkey: 'music:hotkey', onMusicProgress: 'music:progress' };
+  const MU_ID = 'neodex.music', MU_EV = { onMusicHotkey: 'music:hotkey', onMusicProgress: 'music:progress' };
   const neo = new Proxy({}, { get: (_, k) => { const n = ctx.neo;  // cible vide : contextBridge fige les propriétés de neo
     if (typeof k !== 'string') return n[k];
     if (MU_EV[k]) return cb => n.onPluginMain(e => { if (e.id === MU_ID && e.name === MU_EV[k]) cb(e.data); });
     const m = /^music([A-Z]\w*)$/.exec(k);
     return m ? (...a) => n.pluginMain(MU_ID, 'music:' + (m[1] === 'ImportMuPlayer' ? 'pickMuPlayer' : m[1][0].toLowerCase() + m[1].slice(1)), ...a) : n[k];
   } });
-  if (!ctx.host) { view.textContent = "Ce plugin doit être approuvé par NeoBase pour s'ouvrir."; return; }
+  if (!ctx.host) { view.textContent = "Ce plugin doit être approuvé par NeoDex pour s'ouvrir."; return; }
   const host = ctx.host, { el, toast, sfx } = host;
   const folder = ctx.folder;
   host.addStyle(CSS);
@@ -328,7 +328,7 @@ const rhAnalysed = new Map();  // id -> {a, buffer}, for this session (recompute
 async function rhLoadImport(imp) {
   if (rhAnalysed.has(imp.id)) return rhAnalysed.get(imp.id);
   const has = imp.file && (await neo.musicExists([imp.file]))[imp.file];
-  const src = has ? 'neoplugin://neobase.music/file/' + encodeURIComponent(imp.file) : imp.url ? 'neoplugin://neobase.music/stream/?u=' + encodeURIComponent(imp.url) : '';
+  const src = has ? 'neoplugin://neodex.music/file/' + encodeURIComponent(imp.file) : imp.url ? 'neoplugin://neodex.music/stream/?u=' + encodeURIComponent(imp.url) : '';
   if (!src) throw new Error('le fichier de cette musique n\'est pas sur ce PC');
   rhAudio(); toast('Analyse de la musique…');
   const buffer = await rhCtx.decodeAudioData(await neo.musicBuffer(src)), a = await rhAnalyse(buffer), r = {a, buffer};
@@ -417,7 +417,7 @@ async function rhSelect(i, diff) {
   rh = rh || {raf: 0};
   Object.assign(rh, {g: $('rhCanvas').getContext('2d', {alpha: false, desynchronized: true}), mode: 'ready', stars, speed: stars > 2 ? 3.2 : 2.6, tick: 0, song: i, diff, c, info, notes, src: null, ev: 0, t0: 0, score: 0, combo: 0, maxCombo: 0, counts: {PARFAIT: 0, BIEN: 0, OK: 0, RATÉ: 0}, judge: null, mx: 192, my: 112, vx: 192, vy: 112, trail: [], cp: 0, cm: 0, fx: [], i0: 0, bg: null, rect: null, sparks: [], done: false});
   games.neothaLast = {song: i, diff}; rhList();
-  gameLoop(rh, 'neodyme:neotha', rhUpdate, rhDraw);
+  gameLoop(rh, 'neodex:neotha', rhUpdate, rhDraw);
 }
 let rhOffMs = 0;
 const rhLatency = () => (rhCtx?.outputLatency || 0) + (rhCtx?.baseLatency || 0) + rhOffMs / 1000;
@@ -651,7 +651,7 @@ for (const id of ['rhVol', 'rhOffset', 'thCur']) $(id).addEventListener('change'
 function rhOpen() {
   const p = games.neothaPrefs || {}; for (const id of ['rhVol', 'rhOffset', 'thCur']) if (p[id] != null) $(id).value = p[id];
   rhOffMs = +$('rhOffset').value; thCurStyle = $('thCur').value;
-  if (rh) { rhList(); return gameLoop(rh, 'neodyme:neotha', rhUpdate, rhDraw); }
+  if (rh) { rhList(); return gameLoop(rh, 'neodex:neotha', rhUpdate, rhDraw); }
   const last = games.neothaLast || {song: 0, diff: 'normal'}; rhSelect(last.song, last.diff).catch(() => rhSelect(0, 'normal'));  // an imported music may be missing on this PC
 }  // (non indenté : les textes sur plusieurs lignes restent exactement les tiens)
   // ---- fin ----
