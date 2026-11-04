@@ -81,8 +81,8 @@ const PXK = (() => {
   const COMP = { é: 'ea', è: 'eg', ê: 'ec', ë: 'ed', á: 'aa', à: 'ag', â: 'ac', ä: 'ad', í: 'ıa', ì: 'ıg', î: 'ıc', ï: 'ıd', ó: 'oa', ò: 'og', ô: 'oc', ö: 'od',
     ú: 'ua', ù: 'ug', û: 'uc', ü: 'ud', ÿ: 'yd', ñ: 'nt', ç: 'cz', É: 'Ea', È: 'Eg', Ê: 'Ec', Ë: 'Ed', Á: 'Aa', À: 'Ag', Â: 'Ac', Ä: 'Ad', Í: 'Ia', Î: 'Ic', Ï: 'Id',
     Ó: 'Oa', Ô: 'Oc', Ö: 'Od', Ú: 'Ua', Ù: 'Ug', Û: 'Uc', Ü: 'Ud', Ñ: 'Nt', Ç: 'Cz' };
-  const SUB = { 'œ': 'oe', 'Œ': 'OE', '’': "'", '‘': "'", '“': '"', '”': '"', '–': '-', '—': '-', ' ': ' ', ' ': ' ', '•': '·', '✓': 'v' };
-  const H = 11, glyphs = new Map();
+  const SUB = { 'œ': 'oe', 'Œ': 'OE', '’': "'", '‘': "'", '“': '"', '”': '"', '–': '-', '—': '-', ' ': ' ', ' ': ' ', '•': '·', '✓': 'v', 'ᐸ': '<', 'ᐳ': '>', '＜': '<', '＞': '>', '｜': '|', '／': '/', '！': '!', '？': '?', '（': '(', '）': ')', '：': ':', '　': ' ' };  // ᐸ ᐳ : les < > des titres YouTube
+  const H = 11, glyphs = new Map(); let raster;
   function glyph(ch) {
     let g = glyphs.get(ch); if (g) return g;
     const px = [], add = (rows, ox, oy) => rows.forEach((r, y) => { for (let x = 0; x < r.length; x++) if (r[x] === '#') px.push([ox + x, oy + y]); });
@@ -90,7 +90,14 @@ const PXK = (() => {
     if (src) {
       const rows = src.split(' '); w = Math.max(...rows.map(r => r.length)); add(rows, 0, 2);
       if (c) { const a = ACC[c[1]]; add(a, Math.floor((w - a[0].length) / 2), c[1] === 'z' ? 9 : /[A-Z]/.test(c[0]) ? 0 : 1); }
-    } else if (ch !== ' ') { w = 5; add(['#####', '#...#', '#...#', '#...#', '#...#', '#...#', '#####'], 0, 2); }  // une lettre inconnue : une petite case
+    } else if (ch !== ' ') {  // japonais, emoji… : la lettre du système, réduite à des pixels nets (sans lissage) sur la même hauteur que la police
+      const q = (raster ??= document.createElement('canvas').getContext('2d', { willReadFrequently: true })), RW = 16;
+      q.canvas.width = RW; q.canvas.height = H; q.font = '11px "MS Gothic", "Yu Gothic UI", Meiryo, "Segoe UI Symbol", sans-serif'; q.fillStyle = '#000'; q.fillText(ch, 0, 10);
+      const d = q.getImageData(0, 0, RW, H).data; let mx = 0;
+      for (let y = 0; y < H; y++) for (let x = 0; x < RW; x++) if (d[(y * RW + x) * 4 + 3] > 110) { px.push([x, y]); mx = Math.max(mx, x + 1); }
+      w = mx || 3;
+      if (!px.length) { w = 5; add(['#####', '#...#', '#...#', '#...#', '#...#', '#...#', '#####'], 0, 2); }  // vraiment inconnue : une petite case
+    }
     g = { w, px }; glyphs.set(ch, g); return g;
   }
   function layout(text) {
@@ -139,10 +146,6 @@ const PX_ICONS = {
   full: ['www...www', 'w.......w', 'w.......w', '.........', '....a....', '.........', 'w.......w', 'w.......w', 'www...www'],
   note: ['...aaaaaa', '...aaaaaa', '...a....a', '...a....a', '...a....a', '.aaa..aaa', 'aaaa.aaaa', 'aaaa.aaaa', '.aa...aa.'],
   star: ['....g....', '....g....', '...ggg...', 'ggggwgggg', '.ggwwwgg.', '..ggggg..', '..oo.oo..', '.oo...oo.', '.o.....o.'],
-  leaf: ['.....nnnn', '...nnnnnn', '..nnnnnNn', '.nnnnnNnn', '.nnnnNnnn', '.nnnNnnn.', '..nNnn...', '.N.......', 'N........'],
-  bolt: ['....ggo..', '...ggo...', '..ggo....', '.ggggggo.', '....ggo..', '...ggo...', '..go.....', '.go......', '.........'],
-  flame: ['....r....', '...rr....', '..rrr..r.', '..rrorrr.', '.rrooorr.', '.rroggorr', '.rroggor.', '..rooor..', '...rrr...'],
-  skull: ['..wwwww..', '.wwwwwww.', 'wwwwwwwww', 'wkkwwwkkw', 'wkkwwwkkw', 'wwwwkwwww', '.wwwwwww.', '..wkwkw..', '..wwwww..'],
   crown: ['g...g...g', 'gg.ggg.gg', 'ggggggggg', 'grgggggrg', 'ggggggggg', 'ooooooooo'],
   folder: ['oooo.....', 'oggoooooo', 'ggggggggg', 'ggggggggg', 'ggggggggg', 'ggggggggg', 'ooooooooo'],
   vol: ['....w....', '...ww..b.', 'wwwww.b.b', 'wwwww.b.b', 'wwwww.b.b', 'wwwww.b.b', '...ww..b.', '....w....'],
@@ -316,7 +319,7 @@ export default async function (ctx) {
     orange: '#ff9a3c', red: '#ff4f6a', green: '#5ef0a8', green2: '#1f9a64', bg: '#040c1c', bgDot: '#123058', bgDot2: '#0b1d3a', spark: '#1f5a8a', spark2: '#b5f6ff',
     tile: ['................', '..:.............', '................', '.........x......', '................', '.....+..........', '................', '...............:',
       '................', '................', '.x..........*...', '................', '................', '.......:........', '................', '.............+..'] }, emblem: ['.....kkkkk.....', '...kkaaaaakk...', '..kaa.....aak..', '.ka..bbbbb..ak.', '.ka.b.....b.ak.', 'ka.b..www..b.ak', 'ka.b.w...w.b.ak', 'ka.b.w.g.w.b.ak', 'ka.b.w...w.b.ak', 'ka.b..www..b.ak', '.ka.b.....b.ak.', '.ka..bbbbb..ak.', '..kaa.....aak..', '...kkaaaaakk...', '.....kkkkk.....'],
-    icons: [[/^Facile/, 'leaf'], [/^Normal/, 'bolt'], [/^Difficile/, 'flame'], [/^Expert/, 'skull'], [/^JOUER/, 'play'], [/^PLEIN/, 'full'], [/^IMPORTER/, 'folder'], [/^CRÉER/, 'plus'],
+    icons: [[/^PLEIN/, 'full'], [/^IMPORTER/, 'folder'], [/^CRÉER/, 'plus'],
     [/^CHANSONS/, 'note'], [/^MES MUSIQUES/, 'folder'], [/^Volume/, 'vol'], [/^Décalage/, 'clock'], [/^Curseur/, 'cursor'], [/^Difficulté/, 'star']] });
   const $ = id => view.querySelector('#' + id) || document.getElementById(id);
   const doc = async n => { try { return await folder.read(n); } catch { return null; } };
@@ -685,7 +688,17 @@ async function rhSelect(i, diff) {
 }
 let rhOffMs = 0;
 const rhLatency = () => (rhCtx?.outputLatency || 0) + (rhCtx?.baseLatency || 0) + rhOffMs / 1000;
-const rhNow = () => rhCtx.currentTime - rh.t0 - rhLatency();
+// l'horloge audio n'avance que par paquets (~10 ms sous Windows) : sur un écran à 144 ou 165 Hz, elle reste figée une image sur trois
+// et les notes avancent par à-coups. On la prolonge avec l'horloge de l'écran entre deux paquets (jamais de plus de 50 ms, jamais en arrière).
+const rhCk = {ct: -1, pt: 0, out: 0};
+function rhTime() {
+  const t = rhCtx.currentTime, p = performance.now();
+  if (t !== rhCk.ct) { rhCk.ct = t; rhCk.pt = p; }
+  const v = rhCtx.state === 'running' ? t + Math.min(.05, (p - rhCk.pt) / 1000) : t;
+  rhCk.out = v < rhCk.out && rhCk.out - v < .06 ? rhCk.out : v;  // un paquet arrivé un peu tôt ne fait pas reculer les notes
+  return rhCk.out;
+}
+const rhNow = () => rhTime() - rh.t0 - rhLatency();
 function rhBegin() {
   rhAudio(); rhCtx.resume(); rh.t0 = rhCtx.currentTime + 2; rh.ev = 0; rh.mode = 'play';
   if (rh.c.buffer) { try { rh.src?.stop(); } catch {} rh.src = rhCtx.createBufferSource(); rh.src.buffer = rh.c.buffer; rh.src.connect(rhOut); rh.src.start(rh.t0); }  // your own music, in time with the notes
@@ -769,7 +782,6 @@ function rhUpdate() {
   for (const s of rh.sparks) { s.x += s.vx; s.y += s.vy; s.life--; } rh.sparks = rh.sparks.filter(s => s.life > 0);
   for (const f of rh.fx) f.t++; rh.fx = rh.fx.filter(f => f.t < 16);
   rh.trail.push([rh.mx, rh.my]); if (rh.trail.length > 16) rh.trail.shift(); rh.cp *= .86; rh.cm *= .86;
-  rh.vx += (TH.CX + (rh.mx - TH.CX) * .3 - rh.vx) * .08; rh.vy += (TH.CY + (rh.my - TH.CY) * .3 - rh.vy) * .08;  // la caméra suit doucement le curseur
   if (rh.judge && --rh.judge.t <= 0) rh.judge = null;
   if (now > rh.c.len + 1.5) {
     rh.mode = 'over'; try { rh.src?.stop(); } catch {} try { if (document.fullscreenElement) document.exitFullscreen(); } catch {} try { document.exitPointerLock(); } catch {}
@@ -787,10 +799,16 @@ function thSquare(g, x, y, h, col, alpha, lw) {  // un carré creux lumineux
 }
 function rhDraw() {
   const g = rh.g, {W, H, CX, CY, K, HALF, DEPTH} = TH, now = rhCtx && rh.mode !== 'ready' ? rhNow() : -2, appr = 2.4 / rh.speed;
+  // la caméra suit doucement le curseur, à chaque image (et pas 60 fois par seconde : à 165 Hz, le tunnel tremblerait)
+  const pn = performance.now(), dt = Math.min(.1, (pn - (rh.camT || pn)) / 1000), k = rh.mode === 'play' ? 1 - Math.pow(.92, dt * 60) : 0; rh.camT = pn;
+  rh.vx += (TH.CX + (rh.mx - TH.CX) * .3 - rh.vx) * k; rh.vy += (TH.CY + (rh.my - TH.CY) * .3 - rh.vy) * k;
   const beat = 60 / rh.info.bpm, pulse = now > 0 ? Math.max(0, 1 - (now % beat) / beat * 2) : 0, VX = rh.vx, VY = rh.vy, t = now > 0 ? now : 0;
-  g.setTransform(g.canvas.width / W, 0, 0, g.canvas.width / W, 0, 0); g.lineJoin = 'round';
-  if (!thBg) { thBg = document.createElement('canvas'); thBg.width = g.canvas.width; thBg.height = g.canvas.height; const b = thBg.getContext('2d'), gr = b.createRadialGradient(thBg.width / 2, thBg.height * .52, 20, thBg.width / 2, thBg.height * .52, thBg.width * .68); gr.addColorStop(0, '#190a38'); gr.addColorStop(1, '#04010c'); b.fillStyle = gr; b.fillRect(0, 0, thBg.width, thBg.height); }
+  const cv = g.canvas, tw = Math.min(2560, Math.round((cv.clientWidth || 768) * Math.min(2, devicePixelRatio || 1)));
+  if (tw > 200 && Math.abs(cv.width - tw) > 8) { cv.width = tw; cv.height = Math.round(tw * H / W); thBg = null; }  // net à toutes les tailles, plein écran compris
+  g.setTransform(cv.width / W, 0, 0, cv.width / W, 0, 0); g.lineJoin = 'round'; g.imageSmoothingEnabled = false;
+  if (!thBg) { thBg = document.createElement('canvas'); thBg.width = g.canvas.width; thBg.height = g.canvas.height; const b = thBg.getContext('2d'), gr = b.createRadialGradient(thBg.width / 2, thBg.height * .52, 20, thBg.width / 2, thBg.height * .52, thBg.width * .68); gr.addColorStop(0, '#1c0b40'); gr.addColorStop(.55, '#0b0420'); gr.addColorStop(1, '#020007'); b.fillStyle = gr; b.fillRect(0, 0, thBg.width, thBg.height); }
   g.drawImage(thBg, 0, 0, W, H);  // fond préparé une fois
+  if (pulse > 0) { g.globalAlpha = pulse * .07; g.fillStyle = '#ff5ad9'; g.fillRect(VX - 2 * K, VY - 1.2 * K, 4 * K, 2.4 * K); g.globalAlpha = 1; }
   // tunnel : des cadres qui viennent vers toi et des traînées d'étoiles, au rythme de la musique
   for (let k = 0; k < 7; k++) {
     const ph = (((k / 7 - t * .3) % 1) + 1) % 1, s = 1 / (1 + ph * DEPTH * 1.6), h = 2 * K * s * 1.8;
@@ -809,7 +827,9 @@ function rhDraw() {
   for (let q = i1 - 1; q >= rh.i0; q--) {  // du fond vers l'avant, sans trier ni filtrer toute la liste
     const n = rh.notes[q]; if (n.judged || n.t - now < -.2) continue;
     const z = Math.max(0, (n.t - now) / appr), s = 1 / (1 + z * DEPTH), [x, y] = thPos(n), px0 = VX + (x - VX) * s, py0 = VY + (y - VY) * s;
+    if (z < .4) { g.globalAlpha = (1 - z / .4) * .35; g.strokeStyle = n.col; g.lineWidth = 1; g.setLineDash([3, 3]); g.strokeRect(x - HALF, y - HALF, HALF * 2, HALF * 2); g.setLineDash([]); g.globalAlpha = 1; }  // où elle va arriver
     thSquare(g, px0, py0, HALF * s, n.col, Math.min(1, (1 - z) * 3), 1 + 1.4 * s);
+    if (z < .15) thSquare(g, px0, py0, HALF * s * .55, '#ffffff', 1 - z / .15, 1);  // elle s'allume au moment de la toucher
     if (s > .5) px(g, '#ffffff', px0 - 1, py0 - 1, 2, 2);
   }
   for (const f of rh.fx) { const k = f.t / 16, h = HALF * (1 + k * (f.hit ? .9 : .5)); thSquare(g, f.x, f.y, h, f.hit ? '#ffffff' : f.col, 1 - k, 2 - k * 1.5); if (f.hit) thSquare(g, f.x, f.y, h * .6, f.col, (1 - k) * .8, 1); }
@@ -868,8 +888,8 @@ function rhList() {
     const c = el('div', 'sysCard px rhSong' + (rh?.song === imp.id ? ' on' : '')), x = el('button', 'rhDel', '×');
     x.title = 'Retirer ce niveau (la musique reste dans NeoMusic)';
     x.onclick = () => { games.neothaImports = list.filter(o => o !== imp); rhAnalysed.delete(imp.id); saveGames(); rhList(); };
-    c.append(x, el('b', '', imp.name), el('span', 'hint', (imp.bpm ? imp.bpm + ' BPM · ' + clock(imp.len || 0) : 'pas encore analysée') + (imp.url ? ' · YouTube' : ' · fichier'))),
-      rhDiffRow('rhx' + imp.id, rh?.song === imp.id, d => { $('rhImpMsg').textContent = 'Préparation du niveau…'; rhSelect(imp.id, d).then(() => $('rhImpMsg').textContent = '', e => $('rhImpMsg').textContent = 'Impossible : ' + e.message); }, imp);
+    c.append(x, el('b', '', imp.name), el('span', 'hint', (imp.bpm ? imp.bpm + ' BPM · ' + clock(imp.len || 0) : 'pas encore analysée') + (imp.url ? ' · YouTube' : ' · fichier')),
+      rhDiffRow('rhx' + imp.id, rh?.song === imp.id, d => { $('rhImpMsg').textContent = 'Préparation du niveau…'; rhSelect(imp.id, d).then(() => $('rhImpMsg').textContent = '', e => $('rhImpMsg').textContent = 'Impossible : ' + e.message); }, imp));
     return c;
   }) : [el('span', 'hint', 'Importe un fichier audio, ou choisis une musique de NeoMusic : le jeu trouve son tempo et ses temps forts et en fait 4 niveaux.')]));
 }
