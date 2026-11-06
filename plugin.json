@@ -10,6 +10,8 @@
   "neobase": ">=4.1.0",
   "type": "app",
   "category": "Musique",
+  "syncMode": "progression",
+  "syncInfo": "Scores et notes par niveau, réglages, curseur.",
   "mobile": false,
   "system": false,
   "dependencies": {
