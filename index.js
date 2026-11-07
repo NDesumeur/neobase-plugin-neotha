@@ -8,7 +8,7 @@ const HTML = `<div class="appWrap wide">
       <div id="rhSongs"></div>
       <div class="sysCard px rhOpts"><label>Volume <input type="range" id="rhVol" min="0" max="100" value="70"></label>
         
-        <label>Décalage audio <select class="f gSel" id="rhOffset"><option value="-120">-120 ms</option><option value="-80">-80 ms</option><option value="-40">-40 ms</option><option value="0" selected>0 ms</option><option value="40">+40 ms</option><option value="80">+80 ms</option><option value="120">+120 ms</option></select></label>
+        <label>Décalage audio <select class="f gSel" id="rhOffset"><option value="-120">-120 ms</option><option value="-80">-80 ms</option><option value="-40">-40 ms</option><option value="0" selected>Auto</option><option value="40">+40 ms</option><option value="80">+80 ms</option><option value="120">+120 ms</option></select></label>
         <label>Curseur <select class="f gSel" id="thCur"><option value="dot" selected>Point</option><option value="ring">Cercle</option><option value="square">Carré</option></select></label></div></div></div>
   <div class="hint">Comme Rhythia : les notes arrivent du fond du tunnel, partout dans le champ, parfois en longues séries. Passe le curseur dessus à l'instant où elles arrivent ; plus tu es au centre, meilleure est la note. La souris est capturée pendant la partie.</div>
 </div>`;
@@ -20,8 +20,8 @@ const CSS = `.thBox{position:relative}
 .thBox{display:grid;place-items:center;padding:10px;background:#05010b;box-shadow:0 0 0 3px var(--line2);flex:2;min-width:360px}
 .thBox canvas{width:100%;aspect-ratio:384/216;cursor:none}
 .gSel{appearance:none;-webkit-appearance:none;width:auto;font:inherit;font-size:13px;padding:7px 28px 7px 10px;margin-right:8px;color:#d9c6ff;background:#100830 url("data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%2710%27 height=%276%27%3E%3Cpath d=%27M0 0h10L5 6z%27 fill=%27%23ff5ad9%27/%3E%3C/svg%3E") no-repeat right 9px center;border:2px solid #2a1d52;border-radius:0;cursor:pointer}
-.gSel:focus{outline:none;border-color:#ff5ad9}
-.gSel option{background:#100830;color:#d9c6ff}
+.gSel:focus{outline:none;border-color:#3fe0ff}
+.gSel option{background:#0a1a33;color:#b5f6ff}
 .rhMain{display:flex;gap:24px;align-items:flex-start;flex-wrap:wrap}
 .rhSide{display:flex;flex-direction:column;gap:16px;flex:1;min-width:280px}
 #rhSongs{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:14px;max-height:560px;overflow-y:auto;padding:4px 8px 4px 4px}
@@ -342,7 +342,7 @@ function gameLoop(st, appKey, update, draw) {
   st.raf = requestAnimationFrame(frame);
 }
 function gameText(g, w, lines, y0) {  // lignes centrées en police pixel, sur une bande sombre
-  g.fillStyle = 'rgba(11,3,28,.72)'; g.fillRect(0, y0 - 14, w, lines.length * 14 + 14);
+  g.fillStyle = 'rgba(2,9,20,.78)'; g.fillRect(0, y0 - 14, w, lines.length * 14 + 14);
   lines.forEach(([text, color, size], i) => PXK.fill(g, text, w / 2, y0 + i * 14, color, PXK.scale(size), 'center'));
 }
 const px = (g, color, x, y, w = 1, h = 1) => { g.fillStyle = color; g.fillRect(Math.round(x), Math.round(y), w, h); };
@@ -670,6 +670,7 @@ let rhTok = 0;
 // i: index of a song of the game, or the id of an imported music
 async function rhSelect(i, diff) {
   let info, c, notes; const tok = ++rhTok;
+  if (rh) { try { rh.src?.stop(); } catch {} rh.mode = 'load'; }  // la musique entière doit être prête avant de pouvoir lancer
   if (typeof i === 'number') { const song = RH_SONGS[i] || RH_SONGS[0]; c = rhCompose(song); notes = rhChart(c, diff); info = {name: song.name, bpm: song.bpm, key: 'rh' + RH_SONGS.indexOf(song) + diff};
     const buffer = await rhRenderSong(RH_SONGS.indexOf(song), c); c = {events: [], lead: [], len: c.len, step: c.step, buffer}; }
   else {
@@ -682,7 +683,7 @@ async function rhSelect(i, diff) {
   const stars = /^S\d+$/.test(diff) ? +diff.slice(1) : Math.max(1, Math.min(10, Math.round(notes.length / Math.max(30, c.len) * 1.25) + (diff === 'expert' ? 1 : 0)));  // la vitesse des notes dépend du niveau : rapide jusqu'à 2★, très rapide au-delà
   try { rh?.src?.stop(); } catch {}
   rh = rh || {raf: 0};
-  Object.assign(rh, {g: $('rhCanvas').getContext('2d', {alpha: false, desynchronized: true}), mode: 'ready', stars, speed: stars > 2 ? 3.2 : 2.6, tick: 0, song: i, diff, c, info, notes, src: null, ev: 0, t0: 0, score: 0, combo: 0, maxCombo: 0, counts: {PARFAIT: 0, BIEN: 0, OK: 0, RATÉ: 0}, judge: null, mx: 192, my: 112, vx: 192, vy: 112, trail: [], cp: 0, cm: 0, fx: [], i0: 0, bg: null, rect: null, sparks: [], done: false});
+  Object.assign(rh, {g: $('rhCanvas').getContext('2d', {alpha: false}), mode: 'ready', stars, speed: stars > 2 ? 3.2 : 2.6, tick: 0, song: i, diff, c, info, notes, src: null, ev: 0, t0: 0, score: 0, combo: 0, maxCombo: 0, counts: {PARFAIT: 0, BIEN: 0, OK: 0, RATÉ: 0}, judge: null, mx: 192, my: 112, vx: 192, vy: 112, trail: [], cp: 0, cm: 0, fx: [], i0: 0, bg: null, rect: null, sparks: [], done: false});
   games.neothaLast = {song: i, diff}; rhList();
   gameLoop(rh, 'neodex:neotha', rhUpdate, rhDraw);
 }
@@ -700,6 +701,7 @@ function rhTime() {
 }
 const rhNow = () => rhTime() - rh.t0 - rhLatency();
 function rhBegin() {
+  if (!document.fullscreenElement) $('rhCanvas').parentElement.requestFullscreen?.().catch(() => {});  // plein écran : passe aussi par-dessus la barre de NeoDex
   rhAudio(); rhCtx.resume(); rh.t0 = rhCtx.currentTime + 2; rh.ev = 0; rh.mode = 'play';
   if (rh.c.buffer) { try { rh.src?.stop(); } catch {} rh.src = rhCtx.createBufferSource(); rh.src.buffer = rh.c.buffer; rh.src.connect(rhOut); rh.src.start(rh.t0); }  // your own music, in time with the notes
 }
@@ -725,11 +727,15 @@ function thLayout(notes, seed) {  // positions libres, par phrases (deux notes e
   for (const p of phrases) {
     const n = p.length, span = p.at(-1)[0].t - p[0][0].t, r = seeded((n * 131 + Math.round(span * 10) * 17 + p[0][0].lane * 7 + (seed | 0)) | 0);
     const gap = n > 1 ? span / (n - 1) : .5, sp = thClamp(gap * 1.5, .24, .85), dense = gap < .2;
-    const kinds = dense ? ['circle', 'line', 'arc', 'zig'] : n < 3 ? ['jump'] : ['circle', 'line', 'arc', 'zig', 'jump', 'tri'];
+    const kinds = dense ? ['circle', 'line', 'arc', 'zig', 'stack'] : n < 3 ? ['jump', 'grid'] : ['grid', 'grid', 'circle', 'line', 'arc', 'zig', 'jump', 'tri'];
     const kind = kinds[Math.floor(r() * kinds.length)], a0 = r() * 6.283, dir = r() < .5 ? -1 : 1, R = .45 + r() * .45, m = 3 + (r() < .4 ? 1 : 0), pts = [];
     const A = [Math.cos(a0) * .85, Math.sin(a0) * .85], Bp = [-A[0] * (.8 + r() * .4), -A[1] * (.8 + r() * .4)], C = [-Math.sin(a0) * .9, Math.cos(a0) * .9], triple = r() < .3;
+    const gp = []; if (kind === 'grid') { let c = [Math.floor(r() * 3) - 1, Math.floor(r() * 3) - 1]; const far = gap > .3 ? 2 : 1;
+      for (let k = 0; k < n; k++) { gp.push([c[0] * .9, c[1] * .9]); let nc; do nc = [thClamp(c[0] + Math.round((r() * 2 - 1) * far), -1, 1), thClamp(c[1] + Math.round((r() * 2 - 1) * far), -1, 1)]; while (nc[0] === c[0] && nc[1] === c[1]); c = nc; } }
     for (let k = 0; k < n; k++) {
-      if (kind === 'circle') { const th = a0 + dir * k * sp / R; pts.push([Math.cos(th) * R, Math.sin(th) * R]); }
+      if (kind === 'grid') pts.push(gp[k]);
+      else if (kind === 'stack') { const s = 2 * tri((k >> 1) * sp / 2) - 1; pts.push([Math.cos(a0) * s, Math.sin(a0) * s]); }
+      else if (kind === 'circle') { const th = a0 + dir * k * sp / R; pts.push([Math.cos(th) * R, Math.sin(th) * R]); }
       else if (kind === 'arc') { const th = a0 + dir * Math.PI * (n > 1 ? k / (n - 1) : 0) * thClamp(sp * (n - 1) / 2.8, .4, 1); pts.push([Math.cos(th) * .9, Math.sin(th) * .9]); }
       else if (kind === 'line' || kind === 'zig') { const s = 2 * tri(k * sp / 2) - 1, o = kind === 'zig' ? (k & 1 ? .4 : -.4) : 0; pts.push([Math.cos(a0) * s - Math.sin(a0) * o, Math.sin(a0) * s + Math.cos(a0) * o]); }
       else if (kind === 'tri') { const th = a0 + 6.283 * (k % m) / m; pts.push([Math.cos(th) * .9, Math.sin(th) * .9]); }
@@ -741,7 +747,7 @@ function thLayout(notes, seed) {  // positions libres, par phrases (deux notes e
     }
     let x0 = 9, x1 = -9, y0 = 9, y1 = -9; for (const q of pts) { x0 = Math.min(x0, q[0]); x1 = Math.max(x1, q[0]); y0 = Math.min(y0, q[1]); y1 = Math.max(y1, q[1]); }
     const sc = Math.min(1, 2 * B / Math.max(x1 - x0, y1 - y0, 1e-6)), jd = Math.min(1.6, .6 + (p[0][0].t - lastT) * 1.4), ja = r() * 6.283;
-    const tx = thClamp(ex + Math.cos(ja) * jd - pts[0][0] * sc, -B - x0 * sc, B - x1 * sc), ty = thClamp(ey + Math.sin(ja) * jd - pts[0][1] * sc, -B - y0 * sc, B - y1 * sc);
+    const fix = kind === 'grid', tx = fix ? 0 : thClamp(ex + Math.cos(ja) * jd - pts[0][0] * sc, -B - x0 * sc, B - x1 * sc), ty = fix ? 0 : thClamp(ey + Math.sin(ja) * jd - pts[0][1] * sc, -B - y0 * sc, B - y1 * sc);
     p.forEach((slot, k) => {
       const x = pts[k][0] * sc + tx, y = pts[k][1] * sc + ty;
       slot.forEach((nt, j) => out.push({...nt, len: 0, col: TH.COL[idx++ & 1], u: j ? x + (x > 0 ? -.55 : .55) * j : x, v: y}));
@@ -798,28 +804,28 @@ function thSquare(g, x, y, h, col, alpha, lw) {  // un carré creux lumineux
   g.globalAlpha = alpha * .12; g.fillStyle = col; g.fillRect(x - h, y - h, h * 2, h * 2); g.globalAlpha = 1;
 }
 function rhDraw() {
-  const g = rh.g, {W, H, CX, CY, K, HALF, DEPTH} = TH, now = rhCtx && rh.mode !== 'ready' ? rhNow() : -2, appr = 2.4 / rh.speed;
+  const g = rh.g, {W, H, CX, CY, K, HALF, DEPTH} = TH, now = rhCtx && rh.mode !== 'ready' && rh.mode !== 'load' ? rhNow() : -2, appr = 2.4 / rh.speed;
   // la caméra suit doucement le curseur, à chaque image (et pas 60 fois par seconde : à 165 Hz, le tunnel tremblerait)
   const pn = performance.now(), dt = Math.min(.1, (pn - (rh.camT || pn)) / 1000), k = rh.mode === 'play' ? 1 - Math.pow(.92, dt * 60) : 0; rh.camT = pn;
   rh.vx += (TH.CX + (rh.mx - TH.CX) * .3 - rh.vx) * k; rh.vy += (TH.CY + (rh.my - TH.CY) * .3 - rh.vy) * k;
   const beat = 60 / rh.info.bpm, pulse = now > 0 ? Math.max(0, 1 - (now % beat) / beat * 2) : 0, VX = rh.vx, VY = rh.vy, t = now > 0 ? now : 0;
-  const cv = g.canvas, tw = Math.min(2560, Math.round((cv.clientWidth || 768) * Math.min(2, devicePixelRatio || 1)));
+  const cv = g.canvas, tw = Math.min(1920, Math.round((cv.clientWidth || 768) * Math.min(1.5, devicePixelRatio || 1)));
   if (tw > 200 && Math.abs(cv.width - tw) > 8) { cv.width = tw; cv.height = Math.round(tw * H / W); thBg = null; }  // net à toutes les tailles, plein écran compris
   g.setTransform(cv.width / W, 0, 0, cv.width / W, 0, 0); g.lineJoin = 'round'; g.imageSmoothingEnabled = false;
-  if (!thBg) { thBg = document.createElement('canvas'); thBg.width = g.canvas.width; thBg.height = g.canvas.height; const b = thBg.getContext('2d'), gr = b.createRadialGradient(thBg.width / 2, thBg.height * .52, 20, thBg.width / 2, thBg.height * .52, thBg.width * .68); gr.addColorStop(0, '#1c0b40'); gr.addColorStop(.55, '#0b0420'); gr.addColorStop(1, '#020007'); b.fillStyle = gr; b.fillRect(0, 0, thBg.width, thBg.height); }
+  if (!thBg) { thBg = document.createElement('canvas'); thBg.width = g.canvas.width; thBg.height = g.canvas.height; const b = thBg.getContext('2d'), gr = b.createRadialGradient(thBg.width / 2, thBg.height * .52, 20, thBg.width / 2, thBg.height * .52, thBg.width * .68); gr.addColorStop(0, '#0a2244'); gr.addColorStop(.55, '#040f22'); gr.addColorStop(1, '#020007'); b.fillStyle = gr; b.fillRect(0, 0, thBg.width, thBg.height); }
   g.drawImage(thBg, 0, 0, W, H);  // fond préparé une fois
-  if (pulse > 0) { g.globalAlpha = pulse * .07; g.fillStyle = '#ff5ad9'; g.fillRect(VX - 2 * K, VY - 1.2 * K, 4 * K, 2.4 * K); g.globalAlpha = 1; }
+  if (pulse > 0) { g.globalAlpha = pulse * .07; g.fillStyle = '#3fe0ff'; g.fillRect(VX - 2 * K, VY - 1.2 * K, 4 * K, 2.4 * K); g.globalAlpha = 1; }
   // tunnel : des cadres qui viennent vers toi et des traînées d'étoiles, au rythme de la musique
   for (let k = 0; k < 7; k++) {
     const ph = (((k / 7 - t * .3) % 1) + 1) % 1, s = 1 / (1 + ph * DEPTH * 1.6), h = 2 * K * s * 1.8;
-    g.strokeStyle = `rgba(${k % 2 ? '120,100,230' : '255,90,217'},${(1 - ph) * (.1 + pulse * .12)})`; g.lineWidth = .6 + s; g.strokeRect(VX - h * 1.6, VY - h * .9, h * 3.2, h * 1.8);
+    g.strokeStyle = `rgba(${k % 2 ? '40,110,190' : '63,224,255'},${(1 - ph) * (.1 + pulse * .12)})`; g.lineWidth = .6 + s; g.strokeRect(VX - h * 1.6, VY - h * .9, h * 3.2, h * 1.8);
   }
   for (let i = 0; i < 20; i++) {
     const a = i * 2.399, ph = (((i * .173 - t * .5) % 1) + 1) % 1, r0 = ph * ph * 280, r1 = r0 + ph * 22;
-    g.strokeStyle = `rgba(217,198,255,${ph * .45})`; g.lineWidth = .7; g.beginPath(); g.moveTo(VX + Math.cos(a) * r0, VY + Math.sin(a) * r0 * .6); g.lineTo(VX + Math.cos(a) * r1, VY + Math.sin(a) * r1 * .6); g.stroke();
+    g.strokeStyle = `rgba(181,246,255,${ph * .45})`; g.lineWidth = .7; g.beginPath(); g.moveTo(VX + Math.cos(a) * r0, VY + Math.sin(a) * r0 * .6); g.lineTo(VX + Math.cos(a) * r1, VY + Math.sin(a) * r1 * .6); g.stroke();
   }
   // le champ de jeu : quatre coins et un repère au centre (pas de cases)
-  g.strokeStyle = `rgba(217,198,255,${.28 + pulse * .3})`; g.lineWidth = 1; const F = 1.45 * K;
+  g.strokeStyle = `rgba(181,246,255,${.28 + pulse * .3})`; g.lineWidth = 1; const F = 1.45 * K;
   for (const [sx, sy] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) { g.beginPath(); g.moveTo(CX + sx * F, CY + sy * (F - 12)); g.lineTo(CX + sx * F, CY + sy * F); g.lineTo(CX + sx * (F - 12), CY + sy * F); g.stroke(); }
   // les notes, du fond vers l'avant ; une note ratée continue sa route et s'efface
   while (rh.i0 < rh.notes.length && rh.notes[rh.i0].judged) rh.i0++;
@@ -836,26 +842,27 @@ function rhDraw() {
   for (const s of rh.sparks) { g.globalAlpha = s.life / 16; px(g, s.color, s.x, s.y, 2, 2); g.globalAlpha = 1; }
   // le curseur : un réticule (anneau, quatre repères, point central, halo) qui tourne doucement ; il pulse sur une note touchée et devient rouge sur un raté
   const T = rh.trail; g.lineCap = 'round';
-  for (let k = 1; k < T.length; k++) { const q = k / T.length; g.strokeStyle = `rgba(255,160,235,${q * .55})`; g.lineWidth = .6 + q * 3.2; g.beginPath(); g.moveTo(T[k - 1][0], T[k - 1][1]); g.lineTo(T[k][0], T[k][1]); g.stroke(); }
+  for (let k = 1; k < T.length; k++) { const q = k / T.length; g.strokeStyle = `rgba(120,230,255,${q * .55})`; g.lineWidth = .6 + q * 3.2; g.beginPath(); g.moveTo(T[k - 1][0], T[k - 1][1]); g.lineTo(T[k][0], T[k][1]); g.stroke(); }
   g.lineCap = 'butt';
   const cc = rh.cm > .05 ? '#ff4f6d' : '#ffffff', mx = rh.mx, my = rh.my, pu = rh.cp * 2;  // trois styles au choix (Options)
-  if (thCurStyle === 'square') { px(g, 'rgba(255,90,217,.9)', mx - 4, my - 4, 8, 8); g.fillStyle = cc; g.fillRect(mx - 3, my - 3, 6, 6); }
+  if (thCurStyle === 'square') { px(g, 'rgba(63,224,255,.9)', mx - 4, my - 4, 8, 8); g.fillStyle = cc; g.fillRect(mx - 3, my - 3, 6, 6); }
   else if (thCurStyle === 'ring') { g.strokeStyle = cc; g.lineWidth = 1.5; g.beginPath(); g.arc(mx, my, 5 + pu, 0, 6.283); g.stroke(); g.fillStyle = cc; g.beginPath(); g.arc(mx, my, 1.4, 0, 6.283); g.fill(); }
-  else { g.fillStyle = cc; g.beginPath(); g.arc(mx, my, 3.2 + pu * .6, 0, 6.283); g.fill(); g.strokeStyle = 'rgba(255,90,217,.9)'; g.lineWidth = 1.2; g.stroke(); }
+  else { g.fillStyle = cc; g.beginPath(); g.arc(mx, my, 3.2 + pu * .6, 0, 6.283); g.fill(); g.strokeStyle = 'rgba(63,224,255,.9)'; g.lineWidth = 1.2; g.stroke(); }
   // interface
-  g.fillStyle = 'rgba(11,3,28,.7)'; g.fillRect(0, 0, W, 16);
+  g.fillStyle = 'rgba(2,9,20,.75)'; g.fillRect(0, 0, W, 16);
   pxFont(g, String(rh.score).padStart(7, '0'), 4, 11, '#ffffff', 7);
   const title = rh.info.name.length > 30 ? rh.info.name.slice(0, 29) + '…' : rh.info.name;
-  pxFont(g, title, W - 4, 11, '#d9c6ff', 6, 'right');
+  pxFont(g, title, W - 4, 11, '#b5f6ff', 6, 'right');
   const done = rh.counts.PARFAIT + rh.counts.BIEN + rh.counts.OK + rh.counts['RATÉ'], acc = done ? rh.counts.PARFAIT / done : 1;
-  pxFont(g, (acc * 100).toFixed(1) + '%', W / 2, 11, '#8f7bb8', 6, 'center');
-  px(g, '#2a1d52', 0, 16, W, 2); px(g, '#ff5ad9', 0, 16, thClamp(now / rh.c.len, 0, 1) * W, 2);
+  pxFont(g, (acc * 100).toFixed(1) + '%', W / 2, 11, '#7fa9cc', 6, 'center');
+  px(g, '#0b3a52', 0, 16, W, 2); px(g, '#3fe0ff', 0, 16, thClamp(now / rh.c.len, 0, 1) * W, 2);
   if (rh.combo >= 5) pxFont(g, rh.combo + 'x', CX, 200, '#ffffff', 10 + Math.min(4, rh.combo / 40) + pulse * 2, 'center');
   if (rh.judge) pxFont(g, rh.judge.text, CX, 36 - (30 - rh.judge.t) / 6, rh.judge.color, 8, 'center');
   if (rh.mode === 'play' && now < 0) pxFont(g, String(Math.ceil(-now)), CX, 40, '#ffd07a', 16, 'center');
-  if (rh.mode === 'ready') gameText(g, W, [[title.toUpperCase(), '#ff5ad9', 8], [(RH_DIFFS[rh.diff] || 'Perso') + ' · ' + rh.stars + '★ · ' + rh.notes.length + ' notes', '#d9c6ff'], ['Espace ou clic : jouer', '#ffd07a'], ['Bouge la souris sur les notes', '#8f7bb8']], 90);
-  if (rh.mode === 'pause') gameText(g, W, [['PAUSE', '#ffffff', 12], ['Espace ou clic : reprendre', '#d9c6ff']], 100);
-  if (rh.mode === 'over') gameText(g, W, [['NOTE ' + rh.grade, rh.grade === 'S' ? '#ffd07a' : '#ff5ad9', 14], [rh.score + ' points', '#ffffff'], ['Précision ' + (rh.acc * 100).toFixed(1) + ' %', '#d9c6ff'], ['Combo max ' + rh.maxCombo, '#d9c6ff'], [rh.counts.PARFAIT + ' réussies · ' + rh.counts['RATÉ'] + ' ratées', '#8f7bb8'], [rh.record ? 'NOUVEAU RECORD !' : 'Espace : rejouer', '#ffd07a']], 60);
+  if (rh.mode === 'ready') gameText(g, W, [[title.toUpperCase(), '#3fe0ff', 8], [(RH_DIFFS[rh.diff] || 'Perso') + ' · ' + rh.stars + '★ · ' + rh.notes.length + ' notes', '#b5f6ff'], ['Espace ou clic : jouer', '#ffd07a'], ['Bouge la souris sur les notes', '#7fa9cc']], 90);
+  if (rh.mode === 'load') gameText(g, W, [['CHARGEMENT…', '#ffd07a', 10], ['La musique se prépare', '#b5f6ff']], 100);
+  if (rh.mode === 'pause') gameText(g, W, [['PAUSE', '#ffffff', 12], ['Espace ou clic : reprendre', '#b5f6ff']], 100);
+  if (rh.mode === 'over') gameText(g, W, [['NOTE ' + rh.grade, rh.grade === 'S' ? '#ffd07a' : '#3fe0ff', 14], [rh.score + ' points', '#ffffff'], ['Précision ' + (rh.acc * 100).toFixed(1) + ' %', '#b5f6ff'], ['Combo max ' + rh.maxCombo, '#b5f6ff'], [rh.counts.PARFAIT + ' réussies · ' + rh.counts['RATÉ'] + ' ratées', '#7fa9cc'], [rh.record ? 'NOUVEAU RECORD !' : 'Espace : rejouer', '#ffd07a']], 60);
 }
 
 function rhDiffRow(key, sel, play, imp) {
